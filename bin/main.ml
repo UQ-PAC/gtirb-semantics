@@ -31,9 +31,10 @@ type content_block = {
 }
 
 let binary_ind    = 1
-let out_ind       = 2
-let prelude_ind   = 3
-let specs_start   = 4
+let prelude_ind   = 2
+let mra_ind       = 3
+let asli_ind      = 4
+let out_ind       = 5
 let noplen        = 4
 let opcode_length = 4
 
@@ -49,6 +50,13 @@ let strung        = "\""
 let kv_pair       = ":"
 let j_op          = "{"
 let j_cl          = "}"
+let arch          = "regs-arch-arch_instrs-arch_decode"
+let support       = "aes-barriers-debug-feature-hints-interrupts-memory-stubs-fetchdecode"
+let test          = "override-test"
+let types         = "types"
+let spec_d        = '-'
+let path_d        = "/"
+let asl           = ".asl"
 
 let () = 
 
@@ -69,7 +77,6 @@ let () =
   let len         = Bytes.length                                        in
   let b_tl op n   = Bytes.sub op n (len op - n)                         in
   let b_hd op n   = Bytes.sub op 0 n                                    in
-  let asbtol a i  = Array.to_list (Array.sub a i (Array.length a - i))  in 
 
   (* Main *)
   (* Read bytes from the file, skip first 8 *) 
@@ -144,10 +151,18 @@ let () =
 
   (* Organise specs to allow for ASLi evaluation environment setup *)
   let envinfo =
-    let prel    = Sys.argv.(prelude_ind)                                in
-    let specs   = asbtol Sys.argv specs_start                           in
-    let prelude = LoadASL.read_file prel true false                     in
-    let mra     = map (fun t -> LoadASL.read_file t false false) specs  in
+    let spc_dir = Sys.argv.(mra_ind)                                        in
+    let take_paths p sdir fs = String.split_on_char spec_d fs |> 
+        map (fun f -> p ^ path_d ^ sdir ^ path_d ^ f ^ asl)                 in
+    let add_types l = (hd l) :: (spc_dir ^ path_d ^ types ^ asl) :: (tl l)  in
+    let arches  = take_paths spc_dir "arch" arch                            in
+    let support = take_paths spc_dir "support" support                      in
+    let tests   = take_paths Sys.argv.(asli_ind) "tests" test               in
+    let prel    = Sys.argv.(prelude_ind)                                    in
+    let w_types = add_types arches                                          in
+    let specs   = w_types @ support @ tests                                 in
+    let prelude = LoadASL.read_file prel true false                         in
+    let mra     = map (fun t -> LoadASL.read_file t false false) specs      in
     concat (prelude :: mra)
   in
 

@@ -17,5 +17,5 @@ To build and run this you will need:
 
 ## Usage
 ```
-dune exec gtirb_semantics input_path mra_dir output_path
+dune exec gtirb_semantics input_path prelude_path mra_dir asli_tests_dir output_path
 ```
