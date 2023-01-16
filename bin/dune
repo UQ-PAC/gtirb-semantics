@@ -1,0 +1,4 @@
+(executable
+ (public_name gtirb_semantics)
+ (name main)
+ (libraries gtirb_semantics asli.libASL))

@@ -1,0 +1,10 @@
+(library
+ (name gtirb_semantics)
+ (libraries ocaml-protoc-plugin asli.libASL hexstring))
+
+(rule
+ (targets AuxData.ml ByteInterval.ml CFG.ml CodeBlock.ml DataBlock.ml IR.ml Module.ml Offset.ml ProxyBlock.ml Section.ml Symbol.ml SymbolicExpression.ml)
+ (deps
+  (:proto AuxData.proto ByteInterval.proto CFG.proto CodeBlock.proto DataBlock.proto IR.proto Module.proto Offset.proto ProxyBlock.proto Section.proto Symbol.proto SymbolicExpression.proto))
+ (action
+  (run protoc -I . --ocaml_out=. %{proto})))
