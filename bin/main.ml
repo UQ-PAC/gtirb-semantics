@@ -35,7 +35,6 @@ let prelude_ind   = 2
 let mra_ind       = 3
 let asli_ind      = 4
 let out_ind       = 5
-let noplen        = 4
 let opcode_length = 4
 
 let ast           = "ast"
@@ -99,8 +98,8 @@ let () =
     | Ok a    -> a
     | Error e -> failwith (Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e))
   in
-  let modules = ir.modules in
-  let ival_blks =
+  let modules     = ir.modules in
+  let ival_blks   =
     let all_sects = map (fun (m : Module.t) -> m.sections) modules                          in
     let all_texts = map (filter (fun (s : Section.t) -> s.name = text)) all_sects           in
     let intervals = map2 (fun (s : Section.t) -> s.byte_intervals) all_texts |> map flatten in
@@ -188,16 +187,16 @@ let () =
 
   (* Now massage asli outputs into a format which can be serialised and then deserialised by other tools *)
   let serialisable =
-    let l_to_s op d cl l  = op ^ (String.concat d l) ^ cl                                   in
-    let jsoned asts       = map (l_to_s l_op l_dl l_cl) asts |> l_to_s l_op l_dl l_cl       in
-    let json_asts = map2 (fun b -> {b with concat = jsoned b.asts}) with_asts               in
-    let no_nops   = map (filter (fun b -> String.length b.concat > noplen)) json_asts       in  (* Comparing to [[]] not working?               *)
-    let paired    = map2 (fun b -> (Hexstring.encode b.auuid) ^ kv_pair ^ b.concat) no_nops in  (* Ideally this should be base64 instad of hex  *)
+    let l_to_s op d cl l  = op ^ (String.concat d l) ^ cl                                     in
+    let jsoned asts       = map (l_to_s l_op l_dl l_cl) asts |> l_to_s l_op l_dl l_cl         in
+    let json_asts = map2 (fun b -> {b with concat = jsoned b.asts}) with_asts                 in
+    (*let no_nops   = map (filter (fun b -> (b.concat != "[[]]"))) json_asts                    in (* Leave nops in after all *)*)
+    let paired    = map2 (fun b -> (Hexstring.encode b.auuid) ^ kv_pair ^ b.concat) json_asts in  (* Ideally this should be base64 instad of hex  *)
     map (l_to_s j_op l_dl j_cl) paired
   in
 
   (* Finally, sandwich ASTs into the IR amongst the other auxdata *)
-  let encoded   =
+  let encoded =
     let orig_auxes  = map (fun (m : Module.t) -> m.aux_data) modules            in
     let ast_aux j   = ({type_name = ast; data = Bytes.of_string j} : AuxData.t) in
     let new_auxes   = map ast_aux serialisable |> map (fun a -> (ast, a))       in
@@ -209,7 +208,7 @@ let () =
         -> {m with aux_data = a}) mod_joins       in
     let out_gtirb = {ir with modules = mod_fixed} in
     let serial    = IR.to_proto out_gtirb         in
-  Runtime'.Writer.contents serial
+    Runtime'.Writer.contents serial
   in
 
   (* And reserialise to disk *)
