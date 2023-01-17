@@ -197,17 +197,19 @@ let () =
 
   (* Finally, sandwich ASTs into the IR amongst the other auxdata *)
   let encoded =
+    (* Save some space by deleting the cfg *)
+    let no_cfg m (o : IR.t) = {{o with cfg = None} with modules = m}            in
     let orig_auxes  = map (fun (m : Module.t) -> m.aux_data) modules            in
     let ast_aux j   = ({type_name = ast; data = Bytes.of_string j} : AuxData.t) in
     let new_auxes   = map ast_aux serialisable |> map (fun a -> (ast, a))       in
     let aux_joins   = combine orig_auxes new_auxes                              in
     let full_auxes  = map (fun ((l : (string * AuxData.t option) list), (m, b))
-        -> (m, Option.some b) :: l) aux_joins     in
-    let mod_joins   = combine modules full_auxes  in
-    let mod_fixed   = map (fun ((m : Module.t), a)
-        -> {m with aux_data = a}) mod_joins       in
-    let out_gtirb = {ir with modules = mod_fixed} in
-    let serial    = IR.to_proto out_gtirb         in
+        -> (m, Option.some b) :: l) aux_joins   in
+    let mod_joins = combine modules full_auxes  in
+    let mod_fixed = map (fun ((m : Module.t), a)
+        -> {m with aux_data = a}) mod_joins in
+    let out_gtirb   = no_cfg mod_fixed ir   in
+    let serial      = IR.to_proto out_gtirb in
     Runtime'.Writer.contents serial
   in
 
