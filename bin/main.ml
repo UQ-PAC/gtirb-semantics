@@ -73,9 +73,9 @@ let () =
   } in
   
   (* Byte & array manipulation convenience functions *)
-  let len         = Bytes.length                                        in
-  let b_tl op n   = Bytes.sub op n (len op - n)                         in
-  let b_hd op n   = Bytes.sub op 0 n                                    in
+  let len         = Bytes.length                in
+  let b_tl op n   = Bytes.sub op n (len op - n) in
+  let b_hd op n   = Bytes.sub op 0 n            in
 
   (* Main *)
   (* Read bytes from the file, skip first 8 *) 
@@ -96,7 +96,9 @@ let () =
   let ir =
     match gtirb with
     | Ok a    -> a
-    | Error e -> failwith (Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e))
+    | Error e -> failwith (
+        Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
+      )
   in
   let modules     = ir.modules in
   let ival_blks   =
@@ -121,9 +123,10 @@ let () =
     in 
     map (filter (fun b -> b.size > 0)) poly_blks in
   
-  (* Section up byte interval contents to their respective blocks and slice out individual opcodes *)
+  (* Section up byte interval contents to their respective blocks and take individual opcodes *)
   let op_cuts   =
-    let trimmed = map2 (fun b -> {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
+    let trimmed = map2 (fun b -> 
+        {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
     let rec cut_ops contents =
       if len contents <= opcode_length then [contents]
       else ((b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length))
@@ -136,7 +139,8 @@ let () =
     let need_flip = map (fun (m : Module.t)
         -> m.byte_order = ByteOrder.LittleEndian) modules in
     let rec endian_reverse opcode = 
-      if len opcode = 1 then opcode
+      if len opcode = 1
+      then opcode
       else cat (endian_reverse (b_tl opcode 1)) (b_hd opcode 1)                       in
     let flip_opcodes block = {block with opcodes = map endian_reverse block.opcodes}  in
     let pairs = combine need_flip op_cuts in
@@ -183,15 +187,22 @@ let () =
     | []      -> []
     | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length) envinfo)
   in
-  let with_asts = map2 (fun b -> {auuid = b.ruuid; asts = (asts b.opcodes b.address envinfo); concat = ""}) blk_orded in
+  let with_asts = map2 (fun b 
+    -> {
+      auuid   = b.ruuid;
+      asts    = (asts b.opcodes b.address envinfo);
+      concat  = ""
+    }) blk_orded
+  in
 
-  (* Now massage asli outputs into a format which can be serialised and then deserialised by other tools *)
+  (* Now massage asli outputs into a format which can
+     be serialised and then deserialised by other tools *)
   let serialisable =
-    let l_to_s op d cl l  = op ^ (String.concat d l) ^ cl                                     in
-    let jsoned asts       = map (l_to_s l_op l_dl l_cl) asts |> l_to_s l_op l_dl l_cl         in
-    let json_asts = map2 (fun b -> {b with concat = jsoned b.asts}) with_asts                 in
-    (*let no_nops   = map (filter (fun b -> (b.concat != "[[]]"))) json_asts                    in (* Leave nops in after all *)*)
-    let paired    = map2 (fun b -> (Hexstring.encode b.auuid) ^ kv_pair ^ b.concat) json_asts in  (* Ideally this should be base64 instad of hex  *)
+    let l_to_s op d cl l  = op ^ (String.concat d l) ^ cl                             in
+    let jsoned asts       = map (l_to_s l_op l_dl l_cl) asts |> l_to_s l_op l_dl l_cl in
+    let b64 bin   = strung ^ (Bytes.to_string bin |> Base64.encode_exn) ^ strung      in
+    let json_asts = map2 (fun b -> {b with concat = jsoned b.asts}) with_asts         in
+    let paired    = map2 (fun b -> (b64 b.auuid) ^ kv_pair ^ b.concat) json_asts      in
     map (l_to_s j_op l_dl j_cl) paired
   in
 

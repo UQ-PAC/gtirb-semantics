@@ -1,6 +1,6 @@
 (library
  (name gtirb_semantics)
- (libraries ocaml-protoc-plugin asli.libASL hexstring))
+ (libraries ocaml-protoc-plugin asli.libASL hexstring base64))
 
 (rule
  (targets AuxData.ml ByteInterval.ml CFG.ml CodeBlock.ml DataBlock.ml IR.ml Module.ml Offset.ml ProxyBlock.ml Section.ml Symbol.ml SymbolicExpression.ml)
