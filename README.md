@@ -14,6 +14,7 @@ To build and run this you will need:
 * The following OPAM packages:
 	* ocaml-protoc-plugin
 	* hexstring
+	* base64
 
 ## Usage
 ```
