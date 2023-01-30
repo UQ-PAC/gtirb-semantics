@@ -29,6 +29,7 @@ type content_block = {
   raw     : bytes;
   address : int; 
 }
+
 let binary_ind    = 1
 let prelude_ind   = 2
 let mra_ind       = 3
@@ -42,8 +43,6 @@ let hex           = "0x"
 let l_op          = "["
 let l_dl          = ","
 let l_cl          = "]"
-let newline       = "\n"
-let space         = " "
 let strung        = "\""
 let kv_pair       = ":"
 let j_op          = "{"
@@ -55,7 +54,6 @@ let types         = "types"
 let spec_d        = '-'
 let path_d        = "/"
 let asl           = ".asl"
-
 
 let () = 
 
@@ -172,17 +170,14 @@ let () =
 
   (* Evaluate each opcode one by one with a new environment for each *)
   let to_asli op addr =
-    let pp_raw_stmt a = 
-      Utils.to_string (Asl_parser_pp.pp_raw_stmt a) in
+    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim  in
     let address = Some (string_of_int addr)                                     in
     let env     = Eval.build_evaluation_environment envinfo                     in
     let str     = hex ^ Hexstring.encode op                                     in 
     let res     = Dis.retrieveDisassembly ?address env str                      in
-    let ascii   = map pp_raw_stmt res                                     in
+    let ascii   = map p_raw res                                                 in
     let indiv s = init (String.length s) (String.get s) |> map (String.make 1)  in
-    let no_nl s = map (fun l -> if l = newline then space else l) s             in
-    let trimmed = map String.trim ascii                                         in
-    let joined  = map indiv trimmed |> map no_nl |> map (String.concat "")      in
+    let joined  = map indiv ascii |>  map (String.concat "")                    in
     map (fun s -> strung ^ s ^ strung) joined
   in
   let rec asts opcodes addr envinfo =
@@ -220,10 +215,10 @@ let () =
     let mod_joins = combine modules full_auxes  in
     let mod_fixed = map (fun ((m : Module.t), a)
         -> {m with aux_data = a}) mod_joins in
-    (* Save some space by deleting all sections except .text *)
+    (* Save some more space by deleting all sections except .text *)
     let text_only = map (fun (m : Module.t)
         -> {m with sections = filter is_text m.sections}) mod_fixed in
-    let new_ir      = {ir with modules = text_only }                in
+    let new_ir      = {ir with modules = text_only}                 in
     (* Save some more space by deleting IR auxdata, only contains ddisasm version anyways *)
     let out_gtirb   = {new_ir with aux_data = []} in
     let serial      = IR.to_proto out_gtirb       in
