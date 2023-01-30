@@ -30,6 +30,16 @@ type content_block = {
   address : int; 
 }
 
+type translation_block = {
+  rep   : bytes;
+  len   : int;
+  base  : char;
+}
+
+type freq_pq =
+  | Leaf    of int * char
+  | Branch  of int * freq_pq * freq_pq
+
 let binary_ind    = 1
 let prelude_ind   = 2
 let mra_ind       = 3
@@ -56,6 +66,16 @@ let types         = "types"
 let spec_d        = '-'
 let path_d        = "/"
 let asl           = ".asl"
+
+let asli_range    = 93
+let asli_base     = 32
+let left          = "0"
+let right         = "1"
+let right_c       = '1'
+let right_i       = 1
+let left_i        = 0
+let rol           = 2
+let byte_len      = 8.0
 
 let () = 
 
@@ -100,10 +120,11 @@ let () =
         Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
       )
   in
-  let modules     = ir.modules in
+  let modules     = ir.modules                in
+  let is_text (s : Section.t) = s.name = text in
   let ival_blks   =
     let all_sects = map (fun (m : Module.t) -> m.sections) modules                          in
-    let all_texts = map (filter (fun (s : Section.t) -> s.name = text)) all_sects           in
+    let all_texts = map (filter is_text) all_sects                                          in
     let intervals = map2 (fun (s : Section.t) -> s.byte_intervals) all_texts |> map flatten in
     map2 (fun (i : ByteInterval.t)
       -> map (fun b -> {block = b; raw = i.contents; address = i.address}) i.blocks) intervals
@@ -219,8 +240,13 @@ let () =
     let mod_joins = combine modules full_auxes  in
     let mod_fixed = map (fun ((m : Module.t), a)
         -> {m with aux_data = a}) mod_joins in
-    let out_gtirb   = no_cfg mod_fixed ir   in
-    let serial      = IR.to_proto out_gtirb in
+    (* Save some more space by deleting all sections except .text *)
+    let text_only = map (fun (m : Module.t)
+        -> {m with sections = filter is_text m.sections}) mod_fixed in
+    let new_ir      = no_cfg text_only ir         in
+    (* Save some more space by deleting IR auxdata, only contains ddisasm version anyways *)
+    let out_gtirb   = {new_ir with aux_data = []} in
+    let serial      = IR.to_proto out_gtirb       in
     Runtime'.Writer.contents serial
   in
 
