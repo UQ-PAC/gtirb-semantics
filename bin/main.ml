@@ -29,7 +29,6 @@ type content_block = {
   raw     : bytes;
   address : int; 
 }
-
 let binary_ind    = 1
 let prelude_ind   = 2
 let mra_ind       = 3
@@ -56,6 +55,7 @@ let types         = "types"
 let spec_d        = '-'
 let path_d        = "/"
 let asl           = ".asl"
+
 
 let () = 
 
@@ -172,11 +172,13 @@ let () =
 
   (* Evaluate each opcode one by one with a new environment for each *)
   let to_asli op addr =
+    let pp_raw_stmt a = 
+      Utils.to_string (Asl_parser_pp.pp_raw_stmt a) in
     let address = Some (string_of_int addr)                                     in
     let env     = Eval.build_evaluation_environment envinfo                     in
     let str     = hex ^ Hexstring.encode op                                     in 
     let res     = Dis.retrieveDisassembly ?address env str                      in
-    let ascii   = map Asl_utils.pp_stmt res                                     in
+    let ascii   = map pp_raw_stmt res                                     in
     let indiv s = init (String.length s) (String.get s) |> map (String.make 1)  in
     let no_nl s = map (fun l -> if l = newline then space else l) s             in
     let trimmed = map String.trim ascii                                         in
@@ -212,7 +214,7 @@ let () =
     (* Save some space by deleting the cfg *)
     let no_cfg m (o : IR.t) = {{o with cfg = None} with modules = m}            in
     let orig_auxes  = map (fun (m : Module.t) -> m.aux_data) modules            in
-    let ast_aux j   = ({type_name = ast; data = Bytes.of_string j} : AuxData.t) in
+    let ast_aux j   = ({type_name = ast; data = Bytes.of_string j} : AuxData.t)        in
     let new_auxes   = map ast_aux serialisable |> map (fun a -> (ast, a))       in
     let aux_joins   = combine orig_auxes new_auxes                              in
     let full_auxes  = map (fun ((l : (string * AuxData.t option) list), (m, b))
