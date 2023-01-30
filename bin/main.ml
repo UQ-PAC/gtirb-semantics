@@ -30,16 +30,6 @@ type content_block = {
   address : int; 
 }
 
-type translation_block = {
-  rep   : bytes;
-  len   : int;
-  base  : char;
-}
-
-type freq_pq =
-  | Leaf    of int * char
-  | Branch  of int * freq_pq * freq_pq
-
 let binary_ind    = 1
 let prelude_ind   = 2
 let mra_ind       = 3
@@ -66,16 +56,6 @@ let types         = "types"
 let spec_d        = '-'
 let path_d        = "/"
 let asl           = ".asl"
-
-let asli_range    = 93
-let asli_base     = 32
-let left          = "0"
-let right         = "1"
-let right_c       = '1'
-let right_i       = 1
-let left_i        = 0
-let rol           = 2
-let byte_len      = 8.0
 
 let () = 
 
