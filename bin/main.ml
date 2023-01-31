@@ -47,6 +47,8 @@ let strung        = "\""
 let kv_pair       = ":"
 let j_op          = "{"
 let j_cl          = "}"
+let newline       = "\n"
+let outer_str     = "'"
 let arch          = "regs-arch-arch_instrs-arch_decode"
 let support       = "aes-barriers-debug-feature-hints-interrupts-memory-stubs-fetchdecode"
 let test          = "override-test"
@@ -178,8 +180,8 @@ let () =
         else (
           let p = String.sub s 0 1 in
           let q =
-              if p = "\n" 
-              then ","
+              if p = newline 
+              then l_dl
               else p
           in 
           q ^ swap_quotes (String.sub s 1 (slen - 1))
@@ -198,7 +200,7 @@ let () =
     let ascii   = map p_raw res                                                 in
     let indiv s = init (String.length s) (String.get s) |> map (String.make 1)  in
     let joined  = map indiv ascii |>  map (String.concat "")                    in
-    map (fun s -> "'" ^ s ^ "'") joined
+    map (fun s -> outer_str ^ s ^ outer_str) joined
   in
   let rec asts opcodes addr envinfo =
     match opcodes with
