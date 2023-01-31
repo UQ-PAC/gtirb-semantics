@@ -43,12 +43,12 @@ let hex           = "0x"
 let l_op          = "["
 let l_dl          = ","
 let l_cl          = "]"
-let strung        = "\""
-let kv_pair       = ":"
 let j_op          = "{"
 let j_cl          = "}"
+let strung        = "\""
+let alt_str       = "'"
+let kv_pair       = ":"
 let newline       = "\n"
-let outer_str     = "'"
 let arch          = "regs-arch-arch_instrs-arch_decode"
 let support       = "aes-barriers-debug-feature-hints-interrupts-memory-stubs-fetchdecode"
 let test          = "override-test"
@@ -173,21 +173,25 @@ let () =
   (* Evaluate each opcode one by one with a new environment for each *)
   let to_asli op addr =
     let p_raw a = 
-      let rec swap_quotes s =
+      let rec fix_json s =
         let slen = String.length s in
         if slen = 0
         then s
         else (
           let p = String.sub s 0 1 in
           let q =
-              if p = newline 
-              then l_dl
-              else p
+              if p = strung
+              then alt_str
+              else (
+                if p = newline
+                then l_dl
+                else p
+              )
           in 
-          q ^ swap_quotes (String.sub s 1 (slen - 1))
+          q ^ fix_json (String.sub s 1 (slen - 1))
         )
       in 
-      let s = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim |> swap_quotes in
+      let s = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim |> fix_json in
       (
         print_endline s;
         s
@@ -200,7 +204,7 @@ let () =
     let ascii   = map p_raw res                                                 in
     let indiv s = init (String.length s) (String.get s) |> map (String.make 1)  in
     let joined  = map indiv ascii |>  map (String.concat "")                    in
-    map (fun s -> outer_str ^ s ^ outer_str) joined
+    map (fun s -> strung ^ s ^ strung) joined
   in
   let rec asts opcodes addr envinfo =
     match opcodes with
