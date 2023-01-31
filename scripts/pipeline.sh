@@ -17,7 +17,7 @@ echo "Deserialisation checker will be updated to decompress AST soon"
 #read -ra BINPATH <<< $BINARY;
 #NBIN=${BINPATH[-1]};
 #IFS=$OIFS;
-#rm -rf temp;
+#rm -rf temp 2> /dev/null;
 #mkdir temp;
 #cp $BINARY temp;
 #cd temp;
@@ -27,3 +27,4 @@ echo "Deserialisation checker will be updated to decompress AST soon"
 #python3 showasts.py ../temp/$NBIN.gtsem | less;
 #rm *pb2*;
 #cd ../..;
+#rm temp

@@ -170,7 +170,27 @@ let () =
 
   (* Evaluate each opcode one by one with a new environment for each *)
   let to_asli op addr =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim  in
+    let p_raw a = 
+      let rec swap_quotes s =
+        let slen = String.length s in
+        if slen = 0
+        then s
+        else (
+          let p = String.sub s 0 1 in
+          let q =
+              if p = "\n" 
+              then ","
+              else p
+          in 
+          q ^ swap_quotes (String.sub s 1 (slen - 1))
+        )
+      in 
+      let s = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim |> swap_quotes in
+      (
+        print_endline s;
+        s
+      )
+    in
     let address = Some (string_of_int addr)                                     in
     let env     = Eval.build_evaluation_environment envinfo                     in
     let str     = hex ^ Hexstring.encode op                                     in 
@@ -178,7 +198,7 @@ let () =
     let ascii   = map p_raw res                                                 in
     let indiv s = init (String.length s) (String.get s) |> map (String.make 1)  in
     let joined  = map indiv ascii |>  map (String.concat "")                    in
-    map (fun s -> strung ^ s ^ strung) joined
+    map (fun s -> "'" ^ s ^ "'") joined
   in
   let rec asts opcodes addr envinfo =
     match opcodes with
@@ -207,6 +227,7 @@ let () =
   (* Finally, sandwich ASTs into the IR amongst the other auxdata *)
   let encoded =
     let orig_auxes  = map (fun (m : Module.t) -> m.aux_data) modules            in
+    (* TODO : This is ascii text and it takes up most of the gtirb filesize --> compress *)
     let ast_aux j   = ({type_name = ast; data = Bytes.of_string j} : AuxData.t) in
     let new_auxes   = map ast_aux serialisable |> map (fun a -> (ast, a))       in
     let aux_joins   = combine orig_auxes new_auxes                              in
@@ -215,7 +236,7 @@ let () =
     let mod_joins = combine modules full_auxes  in
     let mod_fixed = map (fun ((m : Module.t), a)
         -> {m with aux_data = a}) mod_joins in
-    (* Save some more space by deleting all sections except .text *)
+    (* Save some space by deleting all sections except .text *)
     let text_only = map (fun (m : Module.t)
         -> {m with sections = filter is_text m.sections}) mod_fixed in
     let new_ir      = {ir with modules = text_only}                 in
