@@ -56,7 +56,7 @@ TODO FIGURE THIS OUT
 Some boilerplate Scala code has been provided in ```extras/retreive```. This minimal solution deserialises a .gts file and retrieves the IPCFG, text sections for each module, and semantic information for each module.
 
 ## Disassembly Pipeline
-An example pipeline of disassembly -> instruction lifting -> semantic info is located in scripts/pipeline.sh.
+An example pipeline of disassembly -> instruction lifting -> semantic info -> compression -> serialisation -> deserialisation -> decompression is located in scripts/pipeline.sh.
 This will disassemble an example ARM64 binary and produce:
 * The initial GTIRB IR.
 * The GTIRB IR with compressed semantic information.
