@@ -49,11 +49,11 @@ The serialised output is almost identical to that produced by ddisasm except wit
 The no_blocks field contains the number of blocks in the compression map.
 Each block in the compression map follows the below format:
 
-| Item     | Ascii char | No. Compressed Bits | Compressed Repr |
-|----------|------------|---------------------------------------|
-| Size (B) | 1          | 1                   | 1-2             |
+| Item     | Ascii | no_bits | Compressed |
+|----------|-------|---------|------------|
+| Size (B) | 1     | 1       | 1-2        |
 
-The ``Ascii char'' field contains the original character pre-compression. The no_compressed_bits field contains the number of bits in the compressed representation of the character in question. The ``Compressed Repr'' field contains the compressed representation of that character aligned to the right.
+The Ascii field contains the original character pre-compression. The no_bits field contains the number of bits in the compressed representation of the character in question. The compressed field contains the compressed representation of that character aligned to the right.
 
 The resulting decompressed text output needs only to be wrapped in curly braces before being parsed as JSON with your favourite JSON library.
 
