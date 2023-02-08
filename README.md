@@ -18,6 +18,12 @@ To build and run this you will need:
 
 To massively simplify this, simply copy ```scripts/build-all.sh``` to your desired install directory and run as root. This script assumes a completely fresh Ubuntu 20.04.5 installation. It is advised to run this script within a fresh VM but it should work on established installations.
 
+```
+wget https://raw.githubusercontent.com/UQ-PAC/gtirb-semantics/main/scripts/build-all.sh
+chmod 744 build-all.sh
+./build-all.sh
+```
+
 ## Usage
 ```
 dune exec gtirb_semantics input_path prelude_path mra_dir asli_dir output_path
