@@ -3,7 +3,7 @@
 ## Introduction
 
 This codebase serves to tie several verification tools together.
-The [GTIRB](https://github.com/grammatech/gtirb) intermediate representation produced by the [Datalog Disassembler](https://github.com/GrammaTech/ddisasm) is deserialised using [Google Protocol Buffers](https://developers.google.com/protocol-buffers). This is then dismantled and the [ASLi ASL Interpreter](https://github.com/UQ-PAC/asl-interpreter) is used to add instruction semantics for each instruction opcode. These are then reserialised back into the original IR protobufs alongside the original data produced by DDisasm.
+The [GTIRB](https://github.com/grammatech/gtirb) intermediate representation produced by the [Datalog Disassembler](https://github.com/GrammaTech/ddisasm) is deserialised using [Google Protocol Buffers](https://developers.google.com/protocol-buffers). This is then dismantled and the [ASLi ASL Interpreter](https://github.com/UQ-PAC/asl-interpreter) is used to add instruction semantics for each instruction opcode. These are then reserialised back into the original IR protobufs alongside the original data produced by DDisasm (.gts file).
 
 ## Requirements
 To build and run this you will need:
@@ -35,3 +35,27 @@ This will disassemble an ARM64 binary and produce both the initial GTIRB IR and 
 These will be located in temp/(binary_name).gtirb and temp/(binary_name).gtsem respectively.
 The semantics will also be produced in a JSON-like format to stdout.
 This can be run from the scripts subdirectory with ```./pipeline.sh binary_path prelude_path mra_dir asli_dir```
+
+## GTIRB Specifics
+The serialised output is almost identical to that produced by ddisasm except with a few differences:
+* All Sections except ".text" have been removed from each compilation module. This is as they are not useful for analysis purposes, and take up a lot of effectively dead space.
+* The auxdata attached to the top-level IR has been removed. It contained only the ddisasm version number and is not useful.
+* The semantic information provided by ASLi has been added as an auxdata record for each compilation module. As these outputs are verbose and quite large when formatted as readable text, they have been compressed. The compression scheme is as below:
+
+| Item     | no_blocks | Compression Map                   | Compressed Text |
+|----------|-----------|-----------------------------------|-----------------|
+| Size (B) | 1         | (3 * no_blocks) - (4 * no_blocks) | Remainder       |
+
+The no_blocks field contains the number of blocks in the compression map.
+Each block in the compression map follows the below format:
+
+| Item     | Ascii char | no_compressed_bits | Compressed Repr |
+|----------|------------|--------------------------------------|
+| Size (B) | 1          | 1                  | 1-2             |
+
+The ``Ascii char'' field contains the original character pre-compression. The no_compressed_bits field contains the number of bits in the compressed representation of the character in question. The ``Compressed Repr'' field contains the compressed representation of that character aligned to the right.
+
+The resulting decompressed text output needs only to be wrapped in curly braces before being parsed as JSON with your favourite JSON library.
+
+## Use with other tools
+Some boilerplate Scala code has been provided in ```extras/retreive```. This minimal solution deserialises a .gts file and retrieves the IPCFG, text sections for each module, and semantic information for each module.
