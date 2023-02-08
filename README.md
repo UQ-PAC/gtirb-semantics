@@ -34,7 +34,7 @@ An example pipeline of disassembly -> instruction lifting -> semantic info is lo
 This will disassemble an ARM64 binary and produce both the initial GTIRB IR and the GTIRB IR + semantics.
 These will be located in temp/(binary_name).gtirb and temp/(binary_name).gtsem respectively.
 The semantics will also be produced in a JSON-like format to stdout.
-This can be run from the scripts subdirectory with ```./pipeline.sh binary_path prelude_path mra_dir asli_dir```
+This can be run from the scripts subdirectory with ```./fulltest.sh```
 
 ## GTIRB Specifics
 The serialised output is almost identical to that produced by ddisasm except with a few differences:
