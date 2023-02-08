@@ -1,0 +1,72 @@
+//===- SymbolicExpression.proto -------------------------------*- Proto -*-===//
+//
+//  Copyright (C) 2020 GrammaTech, Inc.
+//
+//  This code is licensed under the MIT license. See the LICENSE file in the
+//  project root for license terms.
+//
+//  This project is sponsored by the Office of Naval Research, One Liberty
+//  Center, 875 N. Randolph Street, Arlington, VA 22203 under contract #
+//  N68335-17-C-0700.  The content of the information does not necessarily
+//  reflect the position or policy of the Government and no official
+//  endorsement should be inferred.
+//
+//===----------------------------------------------------------------------===//
+syntax = "proto3";
+package gtirb.proto;
+option java_package = "com.grammatech.gtirb.proto";
+
+message SymStackConst {
+  int32 offset = 1;
+  bytes symbol_uuid = 2;
+}
+
+message SymAddrConst {
+  int64 offset = 1;
+  bytes symbol_uuid = 2;
+}
+
+message SymAddrAddr {
+  int64 scale = 1;
+  int64 offset = 2;
+  bytes symbol1_uuid = 3;
+  bytes symbol2_uuid = 4;
+}
+
+enum SEAttributeFlag {
+  Part0 = 0;
+  Part1 = 1;
+  Part2 = 2;
+  Part3 = 3;
+  Adjusted = 4;
+  GotRef = 5;
+  GotRelPC = 6;
+  GotRelGot = 7;
+  AddrRelGot = 8;
+  GotRelAddr = 9;
+  GotPage = 10;
+  GotPageOfst = 11;
+  PltRef = 12;
+  GotOff = 13;
+  TpOff = 14;
+  NtpOff = 15;
+  DtpOff = 16;
+  TlsGd = 17;
+  TlsLd = 18;
+  Lo = 19;
+  Hi = 20;
+  Lo12 = 21;
+  Abs = 22;
+  Signed = 23;
+  NoOverflowCheck = 24;
+}
+
+message SymbolicExpression {
+  reserved "stack_const";
+  reserved 1;
+  oneof value {
+    SymAddrConst addr_const = 2;
+    SymAddrAddr addr_addr = 3;
+  }
+  repeated SEAttributeFlag attribute_flags = 4;
+}

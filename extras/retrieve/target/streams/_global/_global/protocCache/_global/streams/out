@@ -1,0 +1,3 @@
+[debug] Attempting to fetch com.google.protobuf % protoc % 3.15.6. This operation may fail.
+[debug] Files retrieved for com.google.protobuf % protoc % 3.15.6:
+[debug] /home/cbing/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protoc/3.15.6/protoc-3.15.6-linux-x86_64.exe, /home/cbing/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protoc/3.15.6/protoc-3.15.6-linux-x86_64.exe, /home/cbing/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protoc/3.15.6/protoc-3.15.6-linux-x86_64.exe

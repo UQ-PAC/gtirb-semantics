@@ -1,0 +1,8 @@
+[0m[[0m[31merror[0m] [0m[0m[31m[31m-- [E007] Type Mismatch Error: /home/cbing/Desktop/PAC/basil-protobufs/src/main/scala/Main.scala:57:33 [0m[0m[0m
+[0m[[0m[31merror[0m] [0m[0m[31m57 |[0m    pullTMap(cut, (mapSize - [31m1[0m), nmap)[0m
+[0m[[0m[31merror[0m] [0m[0m[31m[31m   |[0m                                 ^^^^[0m[0m
+[0m[[0m[31merror[0m] [0m[0m[31m   |[0m                                 Found:    [1m[31m([0m[1m[31mnmap[0m[1m[31m [0m[1m[31m:[0m[1m[31m [0mMap[String, [1m[31mAnyVal[0m][1m[31m)[0m[0m
+[0m[[0m[31merror[0m] [0m[0m[31m   |[0m                                 Required: Map[String, [1m[32mChar[0m][0m
+[0m[[0m[31merror[0m] [0m[0m[31m   |[0m[0m
+[0m[[0m[31merror[0m] [0m[0m[31m   |[0m longer explanation available when compiling with `-explain`[0m
+[0m[[0m[31merror[0m] [0m[0mone error found[0m

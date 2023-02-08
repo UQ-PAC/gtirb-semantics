@@ -1,0 +1,14 @@
+[debug] > Exec(compile; run hw.gts hw.ast.json, Some(acec37e4-74df-42ac-80c7-5420e9f8caa5), Some(CommandSource(console0)))
+[debug] > Exec(compile, None, Some(CommandSource(console0)))
+[debug] Evaluating tasks: Compile / compile
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[success] Total time: 1 s, completed 01/02/2023 12:16:24 PM
+[debug] > Exec(run hw.gts hw.ast.json, None, Some(CommandSource(console0)))
+[debug] Evaluating tasks: Compile / run
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[warn] Canceling execution...
+[error] Cancelled: run hw.gts hw.ast.json
+[error] Cancelled: run hw.gts hw.ast.json
+[error] Use 'last' for the full log.
+[debug] > Exec(shell, None, None)
+[info] shutting down sbt server

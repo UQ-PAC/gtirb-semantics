@@ -1,0 +1,23 @@
+[debug] > Exec(compile; run hw.gts hw.ast.json; exit, Some(a0ea6ba3-8df4-47df-9b5d-929f544cb6e8), Some(CommandSource(console0)))
+[debug] > Exec(compile, None, Some(CommandSource(console0)))
+[debug] Evaluating tasks: Compile / compile
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[info] compiling 1 Scala source to /home/cbing/Desktop/PAC/basil-protobufs/target/scala-3.2.1/classes ...
+[error] -- [E007] Type Mismatch Error: /home/cbing/Desktop/PAC/basil-protobufs/src/main/scala/Main.scala:13:31 
+[error] 13 |  val semantics = getSemantics(mods)
+[error]    |                               ^^^^
+[error]    |        Found:    (mods : Seq[com.grammatech.gtirb.proto.Module.Module])
+[error]    |        Required: List[com.grammatech.gtirb.proto.Module.Module]
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] -- [E006] Not Found Error: /home/cbing/Desktop/PAC/basil-protobufs/src/main/scala/Main.scala:15:7 
+[error] 15 |  dump(readable(0), args(1))
+[error]    |       ^^^^^^^^
+[error]    |       Not found: readable
+[error]    |
+[error]    | longer explanation available when compiling with `-explain`
+[error] two errors found
+[error] (Compile / compileIncremental) Compilation failed
+[error] Total time: 4 s, completed 02/02/2023 11:43:25 AM
+[debug] > Exec(shell, None, None)
+[info] shutting down sbt server

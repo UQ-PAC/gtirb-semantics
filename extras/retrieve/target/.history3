@@ -1,0 +1,13 @@
+1675217078604:compile; run hw.gts hw.ast.json
+1675217814934:exit
+1675217863004:compile; run hw.gts hw.ast.json; exit
+1675302709530:compile
+1675302818135:compile; run hw.gts hw.ast.json; exit
+1675741476312:compile
+1675741490290:compile ; run hw.gts hw.ast.json
+1675741509370:clear
+1675741514754:compile ; run hw.gts hw.ast.json
+1675745302820:compile; run hw.gts hw.ast.json; exit
+1675752433770:compile ; run hw.gts hw.ast.json
+1675820580647:compile; run hw.gts hw.ast.json; exit
+1675828714059:compile; run /home/cbing/Desktop/binaries/hellogtirb/hw.gts /home/cbing/Desktop/binaries/hellogtirb/hw.ast.json

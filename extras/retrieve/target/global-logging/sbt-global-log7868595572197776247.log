@@ -1,0 +1,14 @@
+[debug] > Exec(compile; run hw.gts hw.ast.json, Some(090131e7-ee5d-47fc-9d5d-7ca5a28b9c10), Some(CommandSource(console0)))
+[debug] > Exec(compile, None, Some(CommandSource(console0)))
+[debug] Evaluating tasks: Compile / compile
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[info] Compiling 12 protobuf files to /home/cbing/Desktop/PAC/basil-protobufs/target/scala-3.2.1/src_managed/main/scalapb
+[info] compiling 38 Scala sources to /home/cbing/Desktop/PAC/basil-protobufs/target/scala-3.2.1/classes ...
+[info] done compiling
+[success] Total time: 17 s, completed 01/02/2023 12:11:48 PM
+[debug] > Exec(run hw.gts hw.ast.json, None, Some(CommandSource(console0)))
+[debug] Evaluating tasks: Compile / run
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[success] Total time: 0 s, completed 01/02/2023 12:11:48 PM
+[debug] > Exec(shell, None, None)
+[info] shutting down sbt server
