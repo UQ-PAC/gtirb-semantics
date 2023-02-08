@@ -16,6 +16,8 @@ To build and run this you will need:
 	* hexstring
 	* base64
 
+To massively simplify this, simply copy ```scripts/build-all.sh``` to your desired install directory and run as root. This script assumes a completely fresh Ubuntu 20.04.5 installation. It is advised to run this script within a fresh VM but it should work on established installations.
+
 ## Usage
 ```
 dune exec gtirb_semantics input_path prelude_path mra_dir asli_dir output_path
