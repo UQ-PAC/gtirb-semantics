@@ -29,13 +29,6 @@ chmod 744 build-all.sh
 dune exec gtirb_semantics input_path prelude_path mra_dir asli_dir output_path
 ```
 
-## Disassembly Pipeline
-An example pipeline of disassembly -> instruction lifting -> semantic info is located in scripts/pipeline.sh.
-This will disassemble an ARM64 binary and produce both the initial GTIRB IR and the GTIRB IR + semantics.
-These will be located in temp/(binary_name).gtirb and temp/(binary_name).gtsem respectively.
-The semantics will also be produced in a JSON-like format to stdout.
-This can be run from the scripts subdirectory with ```./fulltest.sh```
-
 ## GTIRB Specifics
 The serialised output is almost identical to that produced by ddisasm except with a few differences:
 * All Sections except ".text" have been removed from each compilation module. This is as they are not useful for analysis purposes, and take up a lot of effectively dead space.
@@ -54,6 +47,21 @@ Each block in the compression map follows the below format:
 | Size (B) | 1     | 1       | 1-2        |
 
 The Ascii field contains the original character pre-compression. The no_bits field contains the number of bits in the compressed representation of the character in question. The compressed field contains the compressed representation of that character aligned to the right. The resulting decompressed text output needs only to be wrapped in curly braces before being parsed as JSON with your favourite JSON library.
+The semantic information JSON data is structured as so:
+```
+TODO FIGURE THIS OUT
+```
 
 ## Use with other tools
 Some boilerplate Scala code has been provided in ```extras/retreive```. This minimal solution deserialises a .gts file and retrieves the IPCFG, text sections for each module, and semantic information for each module.
+
+## Disassembly Pipeline
+An example pipeline of disassembly -> instruction lifting -> semantic info is located in scripts/pipeline.sh.
+This will disassemble an example ARM64 binary and produce:
+* The initial GTIRB IR.
+* The GTIRB IR with compressed semantic information.
+* The raw semantic information without context.
+* The semantic information in the aforementioned JSON structure.
+
+These will be located in example.gtirb, example.gts, example.ast and example.ast.json respectively within ```extras/example-bin```.
+This can be run from the scripts subdirectory with ```./fulltest.sh```. This script assumes the directory layout as produced by ```build-all.sh```.
