@@ -42,4 +42,4 @@ make -C ../mra_tools
 make install
 cd ..
 git clone https://github.com/UQ-PAC/gtirb-semantics
-git clone https://github.com/GNUNotUsername/basil-protobufs
+cp -r gtirb-semantics/extras/retrieve basli
