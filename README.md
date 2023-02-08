@@ -21,8 +21,9 @@ To massively simplify this, simply copy ```scripts/build-all.sh``` to your desir
 ```
 wget https://raw.githubusercontent.com/UQ-PAC/gtirb-semantics/main/scripts/build-all.sh
 chmod 744 build-all.sh
-./build-all.sh
+sudo ./build-all.sh
 ```
+Partway through, opam will ask if it can modify ```~/.profile``` and if it can add a hook to its init scripts. Answer ```y``` to both.
 
 ## Usage
 ```
