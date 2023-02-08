@@ -53,9 +53,7 @@ Each block in the compression map follows the below format:
 |----------|-------|---------|------------|
 | Size (B) | 1     | 1       | 1-2        |
 
-The Ascii field contains the original character pre-compression. The no_bits field contains the number of bits in the compressed representation of the character in question. The compressed field contains the compressed representation of that character aligned to the right.
-
-The resulting decompressed text output needs only to be wrapped in curly braces before being parsed as JSON with your favourite JSON library.
+The Ascii field contains the original character pre-compression. The no_bits field contains the number of bits in the compressed representation of the character in question. The compressed field contains the compressed representation of that character aligned to the right. The resulting decompressed text output needs only to be wrapped in curly braces before being parsed as JSON with your favourite JSON library.
 
 ## Use with other tools
 Some boilerplate Scala code has been provided in ```extras/retreive```. This minimal solution deserialises a .gts file and retrieves the IPCFG, text sections for each module, and semantic information for each module.
