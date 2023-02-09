@@ -1,6 +1,7 @@
 #!/bin/bash
 
-echo This may take several hours. Press enter to continue or ctrl-c to abort.
+echo This may take several hours and you may have to enter the root password several times.
+echo Press enter to continue or ctrl-c to abort.
 read
 wget -O key https://download.grammatech.com/gtirb/files/apt-repo/conf/apt.gpg.key
 sudo apt-key add key
@@ -30,11 +31,12 @@ cd ..
 git clone https://github.com/UQ-PAC/asl-interpreter
 sudo apt-get install -y opam
 opam init
-opam switch create 5.0.0
 eval $(opam env)
 sudo apt install -y libgmp-dev libprotobuf-dev protobuf-compiler default-jdk scala
 opam install -y ocaml dune menhir ott linenoise pprint z3 zarith odoc ocamlformat hexstring base64 ocaml-protoc-plugin
 eval `opam config env`
+echo 'eval $(opam env)' >> ~/.bashrc
+eval $(opam env)
 cd asl-interpreter
 make install
 make -C ../mra_tools clean

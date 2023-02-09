@@ -4,6 +4,7 @@
 
 This codebase serves to tie several verification tools together.
 The [GTIRB](https://github.com/grammatech/gtirb) intermediate representation produced by the [Datalog Disassembler](https://github.com/GrammaTech/ddisasm) is deserialised using [Google Protocol Buffers](https://developers.google.com/protocol-buffers). This is then dismantled and the [ASLi ASL Interpreter](https://github.com/UQ-PAC/asl-interpreter) is used to add instruction semantics for each instruction opcode. These are then reserialised back into the original IR protobufs alongside the original data produced by DDisasm (.gts file).
+The semantic information itself is printed to stdout.
 
 ## Requirements
 To build and run this you will need:
@@ -50,8 +51,18 @@ Each block in the compression map follows the below format:
 The Ascii field contains the original character pre-compression. The no_bits field contains the number of bits in the compressed representation of the character in question. The compressed field contains the compressed representation of that character aligned to the right. The resulting decompressed text output needs only to be wrapped in curly braces before being parsed as JSON with your favourite JSON library.
 The semantic information JSON data is structured as so:
 ```
-TODO FIGURE THIS OUT
+{
+block_uuid : [
+				[
+					opcode_0_semantics
+				], [
+					opcode_1_semantics
+				], ...
+			]
+}
 ```
+Where ```block_uuid``` is the base64 string of a UUID corresponding to a code block within the GTIRB structure.
+Each ```opcode_n_semantics``` are readable strings.
 
 ## Use with other tools
 Some boilerplate Scala code has been provided in ```extras/retreive```. This minimal solution deserialises a .gts file and retrieves the IPCFG, text sections for each module, and semantic information for each module.

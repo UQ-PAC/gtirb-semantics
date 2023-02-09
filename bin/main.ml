@@ -274,7 +274,7 @@ let () =
   (* Sandwich ASTs into the IR amongst the other auxdata *)
   let encoded =
     let pad_8 s =
-      let plen = (String.length s) mod 8 in
+      let plen = (String.length s) mod bsize in
       if plen = 0
       then ""
       else (String.make (bsize - plen) padding)
@@ -283,7 +283,6 @@ let () =
     let i_to_b i      = Char.chr i |> c_to_b                            in
     let orig_auxes    = map (fun (m : Module.t) -> m.aux_data) modules  in
     let compress ast  =
-      print_endline ast;
       (* Do some Huffman compression on asli output because it's huge *)
       (* Bless me Father for I have sinned...                         *)
       let base = Array.make asli_range 0 in
@@ -355,6 +354,7 @@ let () =
           fill_map t (padded @ [h])
       in
       let t_map = fill_map binaried [] in
+      iter (fun f -> Printf.printf "%c %d %s\n" f.base f.len f.rep) t_map;
       let rec binarify compressed remaining =
         (* Using a binary string as an intermediate step because bit twiddling in ocaml is misery *)
         if String.length remaining == 0
@@ -402,7 +402,8 @@ let () =
         let serialise_cell c = Bytes.cat (Bytes.cat (c_to_b c.base) (i_to_b c.len)) (bin_rep c) in
         match m with
         | []      -> empty
-        | h :: t  -> Bytes.cat (serialise_cell h) (serialise_map t)
+        | h :: t  -> (*print_endline (Hexstring.encode (serialise_cell h));*)
+                      Bytes.cat (serialise_cell h) (serialise_map t)
       in
       let prefix = Bytes.cat (i_to_b (length binaried)) (serialise_map binaried) in
       Bytes.cat prefix compressed

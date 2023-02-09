@@ -5,6 +5,12 @@ import com.grammatech.gtirb.proto.Section.Section
 import spray.json._
 import DefaultJsonProtocol._
 
+class TranslationBlock(val ascii: Char, val bits: Int, val repr: String) {
+  def getChar = ascii
+  def getBits = bits
+  def getRepr = repr
+}
+
 def main(args: Array[String]) = {
   val ir        = readIR(args(0))
   val cfg       = ir.cfg
@@ -25,44 +31,64 @@ def dump(json: String, path: String) = {
 }
 
 def getSemantics(mods: Seq[Module]) = {
-  val modAux  = mods.map(_.auxData)
-  val astsRaw = modAux.map(_.get("ast").get.data).head.toByteArray()
-  val nMapBlk = astsRaw(0).toInt
-  val popped  = astsRaw.slice(1, astsRaw.length)
-  val tMap    = pullTMap(popped, nMapBlk, Map[String, Char]())
-  val mapSize = countMap(tMap.keys.toList)
-  val content = astsRaw.slice(mapSize, astsRaw.length)
-  decompress(content, tMap)
+  val modAux    = mods.map(_.auxData)
+  val astsRaw   = modAux.map(_.get("ast").get.data).head.toByteArray()
+  val nMapBlk   = astsRaw(0).toInt
+  val popped    = astsRaw.slice(1, astsRaw.length)
+  val mapBlocks = pullTMap(popped, nMapBlk, List[TranslationBlock]())
+  val mapSize   = countMap(mapBlocks)
+  val translate = blocksToMap(mapBlocks)
+  val binary    = bytesToBinString(popped.slice(mapSize, popped.length))
+  '{' + undoPrefs(binary, 0, 1, "", translate) + '}'
 }
 
 def pad_8(in: String) = {
-  "0" * (8 - (in.length % 8))
+  val nlen = in.length % 8
+  val plen = if (nlen == 0) { 0 } else { 8 - nlen } 
+  "0" * plen
 }
 
-def pullTMap(raw: Array[Byte], mapSize: Int, map: Map[String, Char]) : Map[String, Char] = {
+def bytesToBinString(b: Iterable[Byte]) = {
+  b.map(_.toInt).map(s => s & 0xFF).map(_.toBinaryString).map(s => (pad_8(s) + s)).mkString("")
+}
+
+def pullTMap(raw: Array[Byte], mapSize: Int, map: List[TranslationBlock]) : List[TranslationBlock] = {
   if (mapSize == 0) {
     map
   } else {
     val bits  = raw(1).toInt
     val cend  = if (bits > 8) { 4 } else { 3 }
-    val comp  = raw.slice(2, cend).toList.map(_.toInt).map(_.toBinaryString)
-    val pads  = comp.map(s => (pad_8(s) + s)).mkString("")
-    val key   = pads.slice(pads.length - bits, pads.length)
-    val nmap  = map + (key -> raw(0).toChar)
+    val comp  = bytesToBinString(raw.slice(2, cend))
+    val key   = comp.slice(comp.length - bits, comp.length)
     val cut   = raw.slice(cend, raw.length)
-    pullTMap(cut, (mapSize - 1), nmap)
+    val entry = TranslationBlock(raw(0).toChar, bits, key)
+    val nMap  = entry :: map
+    pullTMap(cut, (mapSize - 1), nMap)
   } 
 }
 
-def countMap(tMap: List[String]) : Int = {
-  if (tMap.length == 0) { 0 }
+def countMap(tMap: List[TranslationBlock]) : Int = {
+  tMap match {
+    case Nil    => 0
+    case h :: t => h.bits + countMap(t)
+  }
+}
+
+def blocksToMap(blocks: List[TranslationBlock]) : Map[String, Char] = {
+  blocks match {
+    case Nil    => Map[String, Char]()
+    case h :: t => blocksToMap(t) + (h.getRepr -> h.getChar)
+  }
+}
+
+def undoPrefs(bits: String, start: Int, len: Int, decomp: String, tMap: Map[String, Char]) : String = {
+  if (start == bits.length) { decomp }
   else {
-    val first = if (tMap(0).length > 8) { 2 } else { 1 }
-    first + countMap(tMap.slice(1, tMap.length))
-  } 
-}
-
-def decompress(compressed: Array[Byte], tMap: Map[String, Char]) = {
-  val bits = compressed.map(_.toInt).map(_.toBinaryString).mkString("")
-  println(bits)
+    val prefix  = bits.substring(start, start + len)
+    val ascii   = tMap.get(prefix)
+    ascii match {
+      case None         => undoPrefs(bits, start, (len + 1), decomp, tMap)
+      case Some(letter) => undoPrefs(bits, (start + len), 1, (decomp + letter), tMap)
+    }
+  }
 }

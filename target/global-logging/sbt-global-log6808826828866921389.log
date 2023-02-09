@@ -1,0 +1,87 @@
+[debug] > Exec(early(addDefaultCommands), None, None)
+[debug] > Exec(addDefaultCommands, None, None)
+[debug] > Exec(early(initialize), None, None)
+[debug] > Exec(initialize, None, None)
+[debug] > Exec(boot, None, None)
+[debug] > Exec(writeSbtVersion, None, None)
+[debug] > Exec(reload, None, None)
+[debug] > Exec(sbtStashOnFailure, None, None)
+[debug] > Exec(onFailure loadFailed, None, None)
+[debug] > Exec(loadp, None, None)
+[info] welcome to sbt 1.8.2 (Private Build Java 1.8.0_352)
+[debug] Load.defaultLoad until apply took 50.461245ms
+[debug]           Load.loadUnit: plugins took 50.589868ms
+[debug]           Load.loadUnit: defsScala took 0.2559ms
+[debug] [Loading] Scanning directory /home/cbing/Desktop/gtirb-semantics/project
+[debug] [Loading] Found non-root projects 
+[debug] [Loading] Done in /home/cbing/Desktop/gtirb-semantics/project, returning: ()
+[debug] deducing auto plugins based on known facts Set(Atom(sbt.plugins.CorePlugin)) and clauses Clauses(Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.ScriptedPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.SbtPlugin),Set(Atom(sbt.ScriptedPlugin)))
+[debug] Clause(Atom(sbt.plugins.SemanticdbPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JUnitXmlReportPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.MiniDependencyTreePlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.plugins.IvyPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.SemanticdbPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.JUnitXmlReportPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.Giter8TemplatePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.MiniDependencyTreePlugin))))
+[debug]   :: deduced result: Matched(sbt.plugins.CorePlugin,sbt.plugins.Giter8TemplatePlugin,sbt.plugins.IvyPlugin,sbt.plugins.JvmPlugin,sbt.plugins.MiniDependencyTreePlugin,sbt.plugins.JUnitXmlReportPlugin,sbt.plugins.SemanticdbPlugin)
+[debug] Plugins.deducer#function took 14.510768 ms
+[debug]               Load.resolveProject(gtirb-semantics-build) took 36.740194ms
+[debug]             Load.loadTransitive: finalizeProject(Project(id gtirb-semantics-build, base: /home/cbing/Desktop/gtirb-semantics/project, plugins: List(<none>))) took 76.285506ms
+[debug] [Loading] Done in /home/cbing/Desktop/gtirb-semantics/project, returning: (gtirb-semantics-build)
+[debug]           Load.loadUnit: loadedProjectsRaw took 90.98076ms
+[debug]           Load.loadUnit: cleanEvalClasses took 0.207057ms
+[debug]         Load.loadUnit(file:/home/cbing/Desktop/gtirb-semantics/project/, ...) took 146.351583ms
+[debug]       Load.apply: load took 259.605858ms
+[debug]       Load.apply: resolveProjects took 6.586465ms
+[debug]       Load.apply: finalTransforms took 55.631487ms
+[debug]       Load.apply: config.delegates took 5.73431ms
+[debug]       Load.apply: Def.make(settings)... took 345.717974ms
+[debug]       Load.apply: structureIndex took 80.905617ms
+[debug]       Load.apply: mkStreams took 1.184641ms
+[info] loading project definition from /home/cbing/Desktop/gtirb-semantics/project
+[debug] Running task... Cancel: Signal, check cycles: false, forcegc: true
+[debug]     Load.loadUnit: plugins took 1268.572138ms
+[debug]     Load.loadUnit: defsScala took 0.002324ms
+[debug] [Loading] Scanning directory /home/cbing/Desktop/gtirb-semantics
+[debug] [Loading] Found non-root projects 
+[debug] [Loading] Done in /home/cbing/Desktop/gtirb-semantics, returning: ()
+[debug] deducing auto plugins based on known facts Set(Atom(sbt.plugins.CorePlugin)) and clauses Clauses(Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.ScriptedPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.SbtPlugin),Set(Atom(sbt.ScriptedPlugin)))
+[debug] Clause(Atom(sbt.plugins.SemanticdbPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JUnitXmlReportPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.MiniDependencyTreePlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.IvyPlugin)))
+[debug] Clause(Atom(sbt.plugins.IvyPlugin),Set(Atom(sbt.plugins.JvmPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.SemanticdbPlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.JUnitXmlReportPlugin)))
+[debug] Clause(Atom(sbt.plugins.CorePlugin),Set(Atom(sbt.plugins.Giter8TemplatePlugin)))
+[debug] Clause(Atom(sbt.plugins.JvmPlugin),Set(Atom(sbt.plugins.MiniDependencyTreePlugin))))
+[debug]   :: deduced result: Matched(sbt.plugins.CorePlugin,sbt.plugins.Giter8TemplatePlugin,sbt.plugins.IvyPlugin,sbt.plugins.JvmPlugin,sbt.plugins.MiniDependencyTreePlugin,sbt.plugins.JUnitXmlReportPlugin,sbt.plugins.SemanticdbPlugin)
+[debug] Plugins.deducer#function took 1.43218 ms
+[debug]         Load.resolveProject(gtirb-semantics) took 0.885881ms
+[debug]       Load.loadTransitive: finalizeProject(Project(id gtirb-semantics, base: /home/cbing/Desktop/gtirb-semantics, plugins: List(<none>))) took 2.636271ms
+[debug] [Loading] Done in /home/cbing/Desktop/gtirb-semantics, returning: (gtirb-semantics)
+[debug]     Load.loadUnit: loadedProjectsRaw took 3.50097ms
+[debug]     Load.loadUnit: cleanEvalClasses took 0.006138ms
+[debug]   Load.loadUnit(file:/home/cbing/Desktop/gtirb-semantics/, ...) took 1272.910665ms
+[debug] Load.apply: load took 1286.19647ms
+[debug] Load.apply: resolveProjects took 0.077737ms
+[debug] Load.apply: finalTransforms took 7.400712ms
+[debug] Load.apply: config.delegates took 0.283572ms
+[debug] Load.apply: Def.make(settings)... took 58.227984ms
+[debug] Load.apply: structureIndex took 31.201984ms
+[debug] Load.apply: mkStreams took 0.002225ms
+[info] set current project to gtirb-semantics (in build file:/home/cbing/Desktop/gtirb-semantics/)
+[debug] > Exec(sbtPopOnFailure, None, None)
+[debug] > Exec(resumeFromFailure, None, None)
+[debug] > Exec(notifyUsersAboutShell, None, None)
+[debug] > Exec(iflast shell, None, None)
+[debug] > Exec(shell, None, None)
+[info] sbt server started at local:///home/cbing/.sbt/1.0/server/2894bd64feeafa78c3d7/sock
+[debug] Writing bsp connection file
+[info] started sbt server

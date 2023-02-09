@@ -23,3 +23,31 @@ setup.log
 .merlin
 
 *swp
+
+# Deserialisation boilerplate ignores
+extras/retrieve/.DS_Store
+extras/retrieve/dist/*
+extras/retrieve/target/*
+extras/retrieve/lib_managed/
+extras/retrieve/project/boot
+extras/retrieve/project/plugins/project
+extras/retrieve/local-plugins.sbt
+extras/retrieve/.history
+extras/retrieve/.enisme
+extras/retrieve/.enisme_cache/
+extras/retrieve/.sbt-scripted
+extras/retrieve/local.sbt
+extras/retrieve/.bsp
+extras/retrieve/.vscode/
+extras/retrieve/.bloop/
+extras/retrieve/.metals/
+extras/retrieve/metals.sbt
+extras/retrieve/.idea
+extras/retrieve/.idea_modules
+extras/retrieve/.worksheet/
+extras/example-bin/example
+extras/example-bin/example.gtirb
+extras/example-bin/example.gts
+extras/example-bin/example.ast
+extras/example-bin/example.ast.json.t
+extras/example-bin/example.ast.json
