@@ -5,7 +5,7 @@ read
 wget -O key https://download.grammatech.com/gtirb/files/apt-repo/conf/apt.gpg.key
 sudo apt-key add key
 rm key
-echo "deb https://download.grammatech.com/gtirb/files/apt-repo focal stable"| tee -a /etc/apt/sources.list
+echo "deb https://download.grammatech.com/gtirb/files/apt-repo focal stable"| sudo tee -a /etc/apt/sources.list
 sudo apt-get update -y
 sudo apt-get install -yqq apt-transport-https curl gnupg gcc-aarch64-linux-gnu git make libgtirb gtirb-pprinter ddisasm libgmp-dev libprotobuf-dev protobuf-compiler default-jdk scala
 echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" | sudo tee /etc/apt/sources.list.d/sbt.list
