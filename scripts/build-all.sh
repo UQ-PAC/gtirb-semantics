@@ -30,7 +30,7 @@ cd ..
 git clone https://github.com/UQ-PAC/asl-interpreter
 sudo apt-get install -y opam
 opam init
-#opam switch create 5.0.0
+opam switch create 5.0.0
 eval $(opam env)
 sudo apt install -y libgmp-dev libprotobuf-dev protobuf-compiler default-jdk scala
 opam install -y ocaml dune menhir ott linenoise pprint z3 zarith odoc ocamlformat hexstring base64 ocaml-protoc-plugin
