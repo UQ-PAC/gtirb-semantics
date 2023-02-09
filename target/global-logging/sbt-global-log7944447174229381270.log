@@ -1,2 +1,0 @@
-[debug] > Exec(compile; run /home/cbing/Desktop/binaries/hellogtirb/hw.gts; exit, Some(84dc871f-453f-485d-ad5f-6f01d8d9a3c9), Some(CommandSource(console0)))
-[info] shutting down sbt server
