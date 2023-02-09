@@ -1,5 +1,5 @@
 import java.io.{FileInputStream, BufferedWriter, FileWriter, File}
-import com.grammatech.gtirb.proto.IR.{IR => Gtirb}
+import com.grammatech.gtirb.proto.IR.IR
 import com.grammatech.gtirb.proto.Module.Module
 import com.grammatech.gtirb.proto.Section.Section
 import spray.json._
@@ -11,12 +11,11 @@ def main(args: Array[String]) = {
   val mods      = ir.modules
   val texts     = mods.map(_.sections(0)).filter(_.name == ".text")
   val semantics = getSemantics(mods)
- // dump(semantics(0), args(1))
 }
 
 def readIR(path: String) = {
-  var fIn   = new FileInputStream(path)
-  Gtirb.parseFrom(fIn)
+  var fIn = new FileInputStream(path)
+  IR.parseFrom(fIn)
 }
 
 def dump(json: String, path: String) = {
@@ -28,14 +27,12 @@ def dump(json: String, path: String) = {
 def getSemantics(mods: Seq[Module]) = {
   val modAux  = mods.map(_.auxData)
   val astsRaw = modAux.map(_.get("ast").get.data).head.toByteArray()
-  val mapSize = astsRaw(0).toInt
+  val nMapBlk = astsRaw(0).toInt
   val popped  = astsRaw.slice(1, astsRaw.length)
-  val tmap    = pullTMap(popped, mapSize, Map[String, Char]())
-  println(mapSize)
-  println(tmap)
-  //astsRaw.map(_.toStringUtf8())
-  //val readable  = astsRaw.map(_.toStringUtf8())
-  //readable.map(_.parseJson)
+  val tMap    = pullTMap(popped, nMapBlk, Map[String, Char]())
+  val mapSize = countMap(tMap.keys.toList)
+  val content = astsRaw.slice(mapSize, astsRaw.length)
+  decompress(content, tMap)
 }
 
 def pad_8(in: String) = {
@@ -46,14 +43,26 @@ def pullTMap(raw: Array[Byte], mapSize: Int, map: Map[String, Char]) : Map[Strin
   if (mapSize == 0) {
     map
   } else {
-    val base  = raw(0)
     val bits  = raw(1).toInt
     val cend  = if (bits > 8) { 4 } else { 3 }
-    val comp  = raw.slice(2, cend).toList.map(_.toInt).map(_.toBinaryString).map(s => (pad_8(s) + s)).mkString("")
-    val key   = comp.slice(comp.length - bits, comp.length)
-    val nmap  = map + (key -> base.toChar)
+    val comp  = raw.slice(2, cend).toList.map(_.toInt).map(_.toBinaryString)
+    val pads  = comp.map(s => (pad_8(s) + s)).mkString("")
+    val key   = pads.slice(pads.length - bits, pads.length)
+    val nmap  = map + (key -> raw(0).toChar)
     val cut   = raw.slice(cend, raw.length)
-    println(s"$base $bits $key")
     pullTMap(cut, (mapSize - 1), nmap)
   } 
+}
+
+def countMap(tMap: List[String]) : Int = {
+  if (tMap.length == 0) { 0 }
+  else {
+    val first = if (tMap(0).length > 8) { 2 } else { 1 }
+    first + countMap(tMap.slice(1, tMap.length))
+  } 
+}
+
+def decompress(compressed: Array[Byte], tMap: Map[String, Char]) = {
+  val bits = compressed.map(_.toInt).map(_.toBinaryString).mkString("")
+  println(bits)
 }
