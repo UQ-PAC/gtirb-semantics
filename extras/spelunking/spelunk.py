@@ -1,6 +1,9 @@
 from sys import argv
 import gtirb
 
+def failure(_):
+    print("That target doesn't exist")
+
 def dump_function_blocks(gtirb):
 	mods	= gtirb.modules
 	auxes	= [dict(m.aux_data) for m in mods			]
@@ -21,16 +24,19 @@ def dump_symbols(gtirb):
             print(s)
         print(s)
 
+def dump_texts(gtirb):
+    pass
+
 def main():
-    ir = gtirb.IR.load_protobuf(argv[1])
-    targets = list(set(argv[2:]))
-    for target in targets:
-        if target == "functions":
-            dump_function_blocks(ir)
-        elif target == "symbols":
-            dump_symbols(ir) 
-        else:
-            print(f"Target {target} doesn't exist")
+    ir      = gtirb.IR.load_protobuf(argv[1])
+    target  = argv[2]
+    dumpTable = {
+            "functions" : dump_function_blocks,
+            "symbols"   : dump_symbols,
+            "texts"     : dump_texts
+    }
+    dump = dumpTable.get(target, failure)
+    dump(ir)
 
 if __name__ == "__main__":
 	main()
