@@ -12,7 +12,7 @@ rm example example.ast example.ast.json example.gtirb example.gts
 aarch64-linux-gnu-gcc example.c -o example
 ddisasm example --ir example.gtirb
 cd ../..
-dune exec gtirb/semantics $GTSARGS > extras/example-bin/example.ast
+dune exec gtirb_semantics $GTSARGS > extras/example-bin/example.ast
 cp extras/example-bin/example.gts ../basli
 cd ../basli
 echo

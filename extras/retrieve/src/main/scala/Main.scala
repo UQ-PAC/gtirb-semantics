@@ -23,56 +23,80 @@ class TranslationBlock(val ascii: Char, val bits: Int, val repr: String) {
  *              https://github.com/spray/spray-json
  */
 def main(args: Array[String]) = {
-  var fIn       = new FileInputStream(args(0))
+  val InFile    = 0
+  val OutFile   = 1
+  val TextSect  = ".text"
+
+  var fIn       = new FileInputStream(args(InFile))
   val ir        = IR.parseFrom(fIn)
   val mods      = ir.modules
 
   val cfg       = ir.cfg
-  val texts     = mods.map(_.sections.head).filter(_.name == ".text")
+  val texts     = mods.map(_.sections.head).filter(_.name == TextSect)
   val symbols   = mods.map(_.symbols)
   val semantics = mods.map(getSemantics)
   val top       = semantics.head.prettyPrint // Just for example's sake
-  val bw        = new BufferedWriter(new FileWriter(new File(args(1))))
+  val bw        = new BufferedWriter(new FileWriter(new File(args(OutFile))))
   bw.write(top)
   bw.close()
 }
 
 /* Retrieve the semantics json data from a compilation module's auxdata */
 def getSemantics(mod: Module) = {
-  val astRaw    = mod.auxData.get("ast").get.data.toByteArray()
-  val nMapBlk   = astRaw(0).toInt
-  val popped    = astRaw.slice(1, astRaw.length)
+  val JOpen     = '{'
+  val JClose    = '}'
+  val BinStart  = 0
+  val BinInitL  = 1
+  val Semantics = "ast"
+  val NBlocks   = 0
+  val MapStart  = 1
+
+  val astRaw    = mod.auxData.get(Semantics).get.data.toByteArray()
+  val nMapBlk   = astRaw(NBlocks).toInt
+  val popped    = astRaw.slice(MapStart, astRaw.length)
   val mapBlocks = pullTMap(popped, nMapBlk, List[TranslationBlock]())
   val mapSize   = countMap(mapBlocks)
   val translate = blocksToMap(mapBlocks)
   val binary    = bytesToBinString(popped.slice(mapSize, popped.length))
-  val json      = '{' + unprefix(binary, 0, 1, "", translate) + '}'
+  val json      = JOpen + unprefix(binary, BinStart, BinInitL, "", translate) + JClose
   json.parseJson
 }
 
 /* Decompression helper */
 def pad_8(in: String) = {
-  val nlen = in.length % 8
-  val plen = if (nlen == 0) { 0 } else { 8 - nlen } 
-  "0" * plen
+  val BLen  = 8
+  val Pad   = "0"
+
+  val nlen  = in.length % BLen
+  val plen  = if (nlen == 0) { 0 } else { BLen - nlen } 
+  Pad * plen
 }
 
 /* Decompression helper */
 def bytesToBinString(b: Iterable[Byte]) = {
-  b.map(_.toInt).map(s => s & 0xFF).map(_.toBinaryString).map(s => (pad_8(s) + s)).mkString("")
+  val UInt8T  = 0xFF
+  val Join    = ""
+
+  b.map(_.toInt).map(s => s & UInt8T).map(_.toBinaryString).map(s => (pad_8(s) + s)).mkString(Join)
 }
 
 /* Separate and deserialise translation map header from the compressed semantics auxdata */
 def pullTMap(raw: Array[Byte], mSiz: Int, map: List[TranslationBlock]) : List[TranslationBlock] = {
+  val Comp1B    = 3
+  val Comp2B    = 4
+  val BLen      = 8
+  val Ascii     = 0
+  val CompStart = 2
+  
   if (mSiz == 0) {
     map
   } else {
     val bits  = raw(1).toInt
-    val cend  = if (bits > 8) { 4 } else { 3 }
-    val comp  = bytesToBinString(raw.slice(2, cend))
+    val cend  = if (bits > BLen) { Comp2B } else { Comp1B }
+    val comp  = bytesToBinString(raw.slice(CompStart, cend))
     val key   = comp.slice(comp.length - bits, comp.length)
     val cut   = raw.slice(cend, raw.length)
-    val entry = TranslationBlock(raw(0).toChar, bits, key)
+    val entry = TranslationBlock(raw(Ascii).toChar, bits, key)
     val nMap  = entry :: map
     pullTMap(cut, (mSiz - 1), nMap)
   } 
@@ -80,9 +104,12 @@ def pullTMap(raw: Array[Byte], mSiz: Int, map: List[TranslationBlock]) : List[Tr
 
 /* Determine the total serialised size of the compression translation map */
 def countMap(tMap: List[TranslationBlock]) : Int = {
+  val Comp1B    = 3
+  val Comp2B    = 4
+  val BLen      = 8
   tMap match {
     case Nil    => 0
-    case h :: t => countMap(t) + (if (h.bits > 8)  { 4 } else { 3 })
+    case h :: t => countMap(t) + (if (h.bits > BLen)  { Comp2B } else { Comp1B })
   }
 }
 

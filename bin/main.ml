@@ -417,7 +417,6 @@ let () =
     let mod_fixed   = map (fun ((m : Module.t), a)
         -> {m with aux_data = a}) mod_joins in
     (* Save some space by deleting all sections except .text, not necessary *)
-    (* TODO Maybe not?  *)
     let text_only   = map (fun (m : Module.t)
         -> {m with sections = filter is_text m.sections}) mod_fixed in
     let new_ir      = {ir with modules = text_only}                 in

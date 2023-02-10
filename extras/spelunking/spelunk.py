@@ -1,8 +1,7 @@
 from sys import argv
-import gtirb
+import gtir
 
-def failure(_):
-    print("That target doesn't exist")
+flatten = lambda ll: ll[0] if len(ll) == 1 else ll[0] + flatten(ll[1:])
 
 def dump_function_blocks(gtirb):
 	mods	= gtirb.modules
@@ -25,7 +24,11 @@ def dump_symbols(gtirb):
         print(s)
 
 def dump_texts(gtirb):
-    pass
+    mods        = gtirb.modules
+    sections    = flatten([m.sections for m in mods])
+    texts       = list(filter(lambda s: s.name == ".text", sections))
+    for t in texts:
+        print(t)
 
 def main():
     ir      = gtirb.IR.load_protobuf(argv[1])
@@ -35,7 +38,7 @@ def main():
             "symbols"   : dump_symbols,
             "texts"     : dump_texts
     }
-    dump = dumpTable.get(target, failure)
+    dump = dumpTable.get(target, lambda _: print("That target doesn't exist."))
     dump(ir)
 
 if __name__ == "__main__":

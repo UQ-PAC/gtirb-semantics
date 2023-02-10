@@ -73,6 +73,7 @@ A GTIRB spelunking tool has been provided in ```extras/spelunking```. It is runn
 |------------|--------------------------------------------------------|
 | functions  | Function blocks from each compilation module's auxdata |
 | symbols    | Symbols from each compilation module                   |
+| texts      | Text sections from each compilation module             |
 
 This tool is easily extendable to accommodate any increased spelunking needs in the future.
 It is important to note that the spelunker will not recognise .gts files due to the structural differences.
