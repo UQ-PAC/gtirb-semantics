@@ -53,12 +53,12 @@ The semantic information JSON data is structured as so:
 ```
 {
     uuid : [
-	        [
-				opcode_0_semantics
-			], [
-				opcode_1_semantics
-			], ...
-	]
+            [
+                opcode_0_semantics
+            ], [
+                opcode_1_semantics
+        ], ...
+    ]
 }
 ```
 Where ```block_uuid``` is the base64 string of a UUID corresponding to a code block within the GTIRB structure.
@@ -66,6 +66,8 @@ Each ```opcode_n_semantics``` are readable strings.
 
 ## Use with other tools
 Some boilerplate Scala code has been provided in ```extras/retreive```. This minimal solution deserialises a .gts file and retrieves the IPCFG, text sections for each module, and semantic information for each module.
+
+Coming soon to ```extras/spelunk``` is a lightweight python tool for dumping contents of a .gts file.
 
 ## Disassembly Pipeline
 An example pipeline of disassembly -> instruction lifting -> semantic info -> compression -> serialisation -> deserialisation -> decompression is located in scripts/pipeline.sh.
