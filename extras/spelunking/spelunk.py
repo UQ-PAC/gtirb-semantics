@@ -13,21 +13,24 @@ def dump_function_blocks(gtirb):
 				print(f"\t{cd}")
 			print()
 
-def main():
-	ir = gtirb.IR.load_protobuf(argv[1])
-	print("loaded")
-	#src = open(argv[1], "rb")
-	targets = list(set(argv[2:]))
-	#gtirb = IR()
-	#gtirb.ParseFromString(src.read()[8:])
-	#src.close()
-	for target in targets:
-		if target == "functions":
-			dump_function_blocks(ir)
-		else:
-			print(f"Target {target} doesn't exist")
-		print("\n")
+def dump_symbols(gtirb):
+    mods    = gtirb.modules
+    symbols = [m.symbols for m in mods]
+    for ss in symbols:
+        for s in ss:
+            print(s)
+        print(s)
 
+def main():
+    ir = gtirb.IR.load_protobuf(argv[1])
+    targets = list(set(argv[2:]))
+    for target in targets:
+        if target == "functions":
+            dump_function_blocks(ir)
+        elif target == "symbols":
+            dump_symbols(ir) 
+        else:
+            print(f"Target {target} doesn't exist")
 
 if __name__ == "__main__":
 	main()
