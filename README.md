@@ -17,12 +17,12 @@ To build and run this you will need:
 	* hexstring
 	* base64
 
-To massively simplify this, simply copy ```scripts/build-all.sh``` to your desired install directory and run as root. This script assumes a completely fresh Ubuntu 20.04.5 installation. It is advised to run this script within a fresh VM but it should work on established installations.
+To massively simplify this, simply run ```scripts/build-all.sh``` in your preferred install directory. This script assumes a completely fresh Ubuntu 20.04.5 installation. It is advised to run this script within a fresh VM but it should work on established installations. A complete installation can take several hours and will prompt for the sudo password at least once.
 
 ```
 wget https://raw.githubusercontent.com/UQ-PAC/gtirb-semantics/main/scripts/build-all.sh
 chmod 744 build-all.sh
-sudo ./build-all.sh
+./build-all.sh
 ```
 Partway through, opam will ask if it can modify ```~/.profile``` and if it can add a hook to its init scripts. Answer ```N``` to both.
 
