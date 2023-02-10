@@ -1,6 +1,6 @@
 (lang dune 3.6)
 
-(name gtirb-semantics)
+(name gtirb_semantics)
 
 (generate_opam_files true)
 
@@ -16,7 +16,7 @@
 (documentation https://github.com/UQ-PAC/gtirb-semantics)
 
 (package
- (name gtirb-semantics)
+ (name gtirb_semantics)
  (synopsis "Add semantic information to the IR of a disassembled ARM64 binary")
  (description "A longer description")
  (depends ocaml dune asli.libASL ocaml-protoc-plugin hextring base64)
