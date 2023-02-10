@@ -5,57 +5,64 @@ import com.grammatech.gtirb.proto.Section.Section
 import spray.json._
 import DefaultJsonProtocol._
 
-class CompressionException(s : String) extends Exception(s) {}
-
+/* Individual block in the decompression map header found before the compressed semantics auxdata */
 class TranslationBlock(val ascii: Char, val bits: Int, val repr: String) {
   def getChar = ascii
   def getBits = bits
   def getRepr = repr
 }
 
+/**
+ * Mostly just boilerplate; take this and develop your own tools from here.
+ *
+ * Accesses the modified GTIRB IR (.gts file) and retrieves:
+ * cfg        : interprocess control flow graph
+ * texts      : text section from each compilation module
+ * symbols    : symbols from each compilation module
+ * semantics  : Spray json AST of the semantic information
+ *              https://github.com/spray/spray-json
+ */
 def main(args: Array[String]) = {
-  val ir        = readIR(args(0))
-  val cfg       = ir.cfg
+  var fIn       = new FileInputStream(args(0))
+  val ir        = IR.parseFrom(fIn)
   val mods      = ir.modules
-  val texts     = mods.map(_.sections(0)).filter(_.name == ".text")
-  val semantics = getSemantics(mods)
-  println(semantics)
-}
 
-def readIR(path: String) = {
-  var fIn = new FileInputStream(path)
-  IR.parseFrom(fIn)
-}
-
-def dump(json: String, path: String) = {
-  val bw = new BufferedWriter(new FileWriter(new File(path)))
-  bw.write(json)
+  val cfg       = ir.cfg
+  val texts     = mods.map(_.sections.head).filter(_.name == ".text")
+  val symbols   = mods.map(_.symbols)
+  val semantics = mods.map(getSemantics)
+  val top       = semantics.head.prettyPrint // Just for example's sake
+  val bw        = new BufferedWriter(new FileWriter(new File(args(1))))
+  bw.write(top)
   bw.close()
 }
 
-def getSemantics(mods: Seq[Module]) = {
-  val modAux        = mods.map(_.auxData)
-  val astsRaw       = modAux.map(_.get("ast").get.data).head.toByteArray()
-  val nMapBlk       = astsRaw(0).toInt
-  val popped        = astsRaw.slice(1, astsRaw.length)
-  val mapBlocks     = pullTMap(popped, nMapBlk, List[TranslationBlock]())
-  val mapSize       = countMap(mapBlocks)
-  val translate     = blocksToMap(mapBlocks)
-  val binary        = bytesToBinString(popped.slice(mapSize, popped.length))
-  val json          = '{' + unprefix(binary, 0, 1, "", translate) + '}'
+/* Retrieve the semantics json data from a compilation module's auxdata */
+def getSemantics(mod: Module) = {
+  val astRaw    = mod.auxData.get("ast").get.data.toByteArray()
+  val nMapBlk   = astRaw(0).toInt
+  val popped    = astRaw.slice(1, astRaw.length)
+  val mapBlocks = pullTMap(popped, nMapBlk, List[TranslationBlock]())
+  val mapSize   = countMap(mapBlocks)
+  val translate = blocksToMap(mapBlocks)
+  val binary    = bytesToBinString(popped.slice(mapSize, popped.length))
+  val json      = '{' + unprefix(binary, 0, 1, "", translate) + '}'
   json.parseJson
 }
 
+/* Decompression helper */
 def pad_8(in: String) = {
   val nlen = in.length % 8
   val plen = if (nlen == 0) { 0 } else { 8 - nlen } 
   "0" * plen
 }
 
+/* Decompression helper */
 def bytesToBinString(b: Iterable[Byte]) = {
   b.map(_.toInt).map(s => s & 0xFF).map(_.toBinaryString).map(s => (pad_8(s) + s)).mkString("")
 }
 
+/* Separate and deserialise translation map header from the compressed semantics auxdata */
 def pullTMap(raw: Array[Byte], mSiz: Int, map: List[TranslationBlock]) : List[TranslationBlock] = {
   if (mSiz == 0) {
     map
@@ -71,6 +78,7 @@ def pullTMap(raw: Array[Byte], mSiz: Int, map: List[TranslationBlock]) : List[Tr
   } 
 }
 
+/* Determine the total serialised size of the compression translation map */
 def countMap(tMap: List[TranslationBlock]) : Int = {
   tMap match {
     case Nil    => 0
@@ -78,6 +86,7 @@ def countMap(tMap: List[TranslationBlock]) : Int = {
   }
 }
 
+/* Convert translation header blocks to a hashmap for speedy decompression */
 def blocksToMap(blocks: List[TranslationBlock]) : Map[String, Char] = {
   blocks match {
     case Nil    => Map[String, Char]()
@@ -85,6 +94,10 @@ def blocksToMap(blocks: List[TranslationBlock]) : Map[String, Char] = {
   }
 }
 
+/*
+ * Translate a binary string representation of the compressed semantics auxdata
+ * back into the original uncompressed auxdata
+ */
 def unprefix(bits: String, start: Int, len: Int, dcmp: String, tMap: Map[String, Char]) : String = {
   val blen    = bits.length
   val target  = start + len

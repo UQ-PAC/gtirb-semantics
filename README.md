@@ -52,13 +52,13 @@ The Ascii field contains the original character pre-compression. The no_bits fie
 The semantic information JSON data is structured as so:
 ```
 {
-block_uuid : [
-				[
-					opcode_0_semantics
-				], [
-					opcode_1_semantics
-				], ...
-			]
+    uuid : [
+	        [
+				opcode_0_semantics
+			], [
+				opcode_1_semantics
+			], ...
+	]
 }
 ```
 Where ```block_uuid``` is the base64 string of a UUID corresponding to a code block within the GTIRB structure.

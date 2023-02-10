@@ -427,7 +427,7 @@ let () =
     Runtime'.Writer.contents serial
   in
 
-  (* And reserialise to disk *)
+  (* Reserialise to disk *)
   let out = open_out_bin Sys.argv.(out_ind) in
   (
     Printf.fprintf out "%s" encoded;
