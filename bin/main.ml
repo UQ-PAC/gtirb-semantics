@@ -354,7 +354,6 @@ let () =
           fill_map t (padded @ [h])
       in
       let t_map = fill_map binaried [] in
-      iter (fun f -> Printf.printf "%c %d %s\n" f.base f.len f.rep) t_map;
       let rec binarify compressed remaining =
         (* Using a binary string as an intermediate step because bit twiddling in ocaml is misery *)
         if String.length remaining == 0
@@ -402,8 +401,7 @@ let () =
         let serialise_cell c = Bytes.cat (Bytes.cat (c_to_b c.base) (i_to_b c.len)) (bin_rep c) in
         match m with
         | []      -> empty
-        | h :: t  -> (*print_endline (Hexstring.encode (serialise_cell h));*)
-                      Bytes.cat (serialise_cell h) (serialise_map t)
+        | h :: t  -> Bytes.cat (serialise_cell h) (serialise_map t)
       in
       let prefix = Bytes.cat (i_to_b (length binaried)) (serialise_map binaried) in
       Bytes.cat prefix compressed
@@ -414,12 +412,13 @@ let () =
     let new_auxes   = map ast_aux serialisable |> map (fun a -> (ast, a)) in
     let aux_joins   = combine orig_auxes new_auxes                        in
     let full_auxes  = map (fun ((l : (string * AuxData.t option) list), (m, b))
-        -> (m, Option.some b) :: l) aux_joins   in
-    let mod_joins = combine modules full_auxes  in
-    let mod_fixed = map (fun ((m : Module.t), a)
+        -> (m, Option.some b) :: l) aux_joins     in
+    let mod_joins   = combine modules full_auxes  in
+    let mod_fixed   = map (fun ((m : Module.t), a)
         -> {m with aux_data = a}) mod_joins in
-    (* Save some space by deleting all sections except .text, not necessary*)
-    let text_only = map (fun (m : Module.t)
+    (* Save some space by deleting all sections except .text, not necessary *)
+    (* TODO Maybe not?  *)
+    let text_only   = map (fun (m : Module.t)
         -> {m with sections = filter is_text m.sections}) mod_fixed in
     let new_ir      = {ir with modules = text_only}                 in
     (* Save some more space by deleting IR auxdata, only contains ddisasm version anyways *)

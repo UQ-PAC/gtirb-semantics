@@ -19,6 +19,7 @@ def main(args: Array[String]) = {
   val mods      = ir.modules
   val texts     = mods.map(_.sections(0)).filter(_.name == ".text")
   val semantics = getSemantics(mods)
+  println(semantics)
 }
 
 def readIR(path: String) = {
@@ -40,10 +41,9 @@ def getSemantics(mods: Seq[Module]) = {
   val mapBlocks     = pullTMap(popped, nMapBlk, List[TranslationBlock]())
   val mapSize       = countMap(mapBlocks)
   val translate     = blocksToMap(mapBlocks)
-  println(translate)
   val binary        = bytesToBinString(popped.slice(mapSize, popped.length))
   val json          = '{' + unprefix(binary, 0, 1, "", translate) + '}'
-  println(json)
+  json.parseJson
 }
 
 def pad_8(in: String) = {
