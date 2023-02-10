@@ -1,0 +1,1 @@
+1675987855502:compile; run ../gtirb-semantics/extras/example-bin/example.gts ../gtirb-semantics/extras/example-bin/example.ast.json.t; exit

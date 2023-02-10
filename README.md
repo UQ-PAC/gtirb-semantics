@@ -77,3 +77,4 @@ This will disassemble an example ARM64 binary and produce:
 
 These will be located in example.gtirb, example.gts, example.ast and example.ast.json respectively within ```extras/example-bin```.
 This can be run from the scripts subdirectory with ```./fulltest.sh```. This script assumes the directory layout as produced by ```build-all.sh```.
+As such, if the scala code located in ```extras/retrieve``` is modified, then it must be copied to a directory ```basli``` adjacent to ```gtirb-semantics```, as per the layout created by ```scripts/build-all.sh``` in order to avoid modifying ```fulltest.sh``` itself.
