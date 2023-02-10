@@ -69,9 +69,11 @@ Some boilerplate Scala code has been provided in ```extras/retreive```. This min
 
 A GTIRB spelunking tool has been provided in ```extras/spelunking```. It is runnable with ```python3 spelunk.py gtirb_file search_key``` where ```search_key``` is any of the below:
 
-| Term     | Target                                                 |
-|----------|--------------------------------------------------------|
-| Function | Function blocks from each compilation module's auxdata |
+| Search Key | Target                                                 |
+|------------|--------------------------------------------------------|
+| Function   | Function blocks from each compilation module's auxdata |
+
+It is important to note that the spelunker will not recognise .gts files due to the structural differences.
 
 ## Disassembly Pipeline
 An example pipeline of disassembly -> instruction lifting -> semantic info -> compression -> serialisation -> deserialisation -> decompression is located in scripts/pipeline.sh.
