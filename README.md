@@ -69,11 +69,15 @@ Some boilerplate Scala code has been provided in ```extras/retreive```. This min
 
 A GTIRB spelunking tool has been provided in ```extras/spelunking```. It is runnable with ```python3 spelunk.py gtirb_file search_key``` where ```search_key``` is any of the below:
 
-| Search Key | Target                                                 |
-|------------|--------------------------------------------------------|
-| functions  | Function blocks from each compilation module's auxdata |
-| symbols    | Symbols from each compilation module                   |
-| texts      | Text sections from each compilation module             |
+| Search Key | Target                                                                          |
+|------------|---------------------------------------------------------------------------------|
+| cfg        | Interprocess control flow graph for the entire binary                           |
+| code       | Code blocks from each compilation module                                        |
+| data       | Data blocks from each compilation module                                        |
+| functions  | Function blocks from each compilation module's auxdata                          |
+| instrs     | Dumps instructions as they appear in each texct section, may be endian-inverted |
+| symbols    | Symbols from each compilation module                                            |
+| texts      | Text sections from each compilation module                                      |
 
 This tool is easily extendable to accommodate any increased spelunking needs in the future.
 It is important to note that the spelunker will not recognise .gts files due to the structural differences.
