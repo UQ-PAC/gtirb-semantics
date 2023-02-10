@@ -79,6 +79,8 @@ A GTIRB spelunking tool has been provided in ```extras/spelunking```. It is runn
 | symbols    | Symbols from each compilation module                                            |
 | texts      | Text sections from each compilation module                                      |
 
+This has been provided to make it easier to extract relevant information from the GTIRB IR when developing future tools. Alternatively, see the ```--json``` option in ```ddisdasm``` for producing a readable JSON representation of the GTIRB IR, although this will be extremely verbose.
+
 This tool is easily extendable to accommodate any increased spelunking needs in the future.
 It is important to note that the spelunker will not recognise .gts files due to the structural differences.
 
