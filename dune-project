@@ -1,26 +1,26 @@
 (lang dune 3.6)
 
-(name gtirb)
+(name gtirb-semantics)
 
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github UQ-PAC/gtirb-semantics))
 
-(authors "Author Name")
+(authors "Chris Binggeli/GNUNotUsername")
 
-(maintainers "Maintainer Name")
+(maintainers "UQ-PAC")
 
 (license LICENSE)
 
-(documentation https://url/to/documentation)
+(documentation https://github.com/UQ-PAC/gtirb-semantics/README.md)
 
 (package
- (name gtirb)
- (synopsis "A short synopsis")
+ (name gtirb-semantics)
+ (synopsis "Add semantic information to the IR of a disassembled ARM64 binary")
  (description "A longer description")
- (depends ocaml dune)
+ (depends ocaml dune asli.libASL ocaml-protoc-plygin hextring base64)
  (tags
-  (topics "to describe" your project)))
+  (decompilers instruction-lifters static-analysis)))
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/dune-files.html#dune-project
