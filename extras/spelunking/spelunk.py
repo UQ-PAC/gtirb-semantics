@@ -1,7 +1,10 @@
 from sys import argv
-import gtir
+import gtirb
 
 flatten = lambda ll: ll[0] if len(ll) == 1 else ll[0] + flatten(ll[1:])
+
+def dump_cfg(gtirb):
+    print(gtirb.cfg)
 
 def dump_function_blocks(gtirb):
 	mods	= gtirb.modules
@@ -34,8 +37,9 @@ def main():
     ir      = gtirb.IR.load_protobuf(argv[1])
     target  = argv[2]
     dumpTable = {
-            "functions" : dump_function_blocks,
-            "symbols"   : dump_symbols,
+            "cfg"       : dump_cfg              ,
+            "functions" : dump_function_blocks  ,
+            "symbols"   : dump_symbols          ,
             "texts"     : dump_texts
     }
     dump = dumpTable.get(target, lambda _: print("That target doesn't exist."))
