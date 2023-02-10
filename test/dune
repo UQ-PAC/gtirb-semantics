@@ -1,2 +1,2 @@
 (test
- (name gtirb-semantics))
+ (name gtirb_semantics))
