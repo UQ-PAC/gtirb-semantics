@@ -3,20 +3,20 @@ opam-version: "2.0"
 synopsis: "Add semantic information to the IR of a disassembled ARM64 binary"
 description: "A longer description"
 maintainer: ["UQ-PAC"]
-authors: ["Chris Binggeli"]
+authors: ["Chris Binggeli/GNUNotUsername"]
 license: "LICENSE"
-tags: ["decompilers", "disassembly", "instruction lifters" "static analysis"]
+tags: ["decompilers" "instruction-lifters" "static-analysis"]
 homepage: "https://github.com/UQ-PAC/gtirb-semantics"
 doc: "https://github.com/UQ-PAC/gtirb-semantics"
-bug-reports: "https://github.com/UQ-PAC/gtirb-semantics"/issues"
+bug-reports: "https://github.com/UQ-PAC/gtirb-semantics/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.6"}
-  "odoc" {with-doc}
   "asli.libASL"
   "ocaml-protoc-plugin"
-  "hexstring"
+  "hextring"
   "base64"
+  "odoc" {with-doc}
 ]
 build: [
   ["dune" "subst"] {dev}

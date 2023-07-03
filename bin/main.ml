@@ -1,4 +1,4 @@
-open Ocaml_protoc_plugin.Runtime
+open Ocaml_protoc_plugin
 open Gtirb_semantics.IR.Gtirb.Proto
 open Gtirb_semantics.ByteInterval.Gtirb.Proto
 open Gtirb_semantics.Module.Gtirb.Proto
@@ -125,10 +125,9 @@ let () =
     close_in ic; 
     res
   in
-
   (* Pull out interesting code bits *)
   let gtirb = 
-    let raw = Runtime'.Reader.create bytes in
+    let raw = Reader.create bytes in
     IR.from_proto raw
   in
   let ir =
@@ -240,8 +239,8 @@ let () =
     (* Set up and tear down eval environment for every single instruction *)
     let address = Some (string_of_int addr)                                     in
     let env     = Eval.build_evaluation_environment envinfo                     in
-    let str     = hex ^ Hexstring.encode op                                     in 
-    let res     = Dis.retrieveDisassembly ?address env str                      in
+    let str     = hex ^ Hexstring.encode op                                     in
+    let res     = Dis.retrieveDisassembly ?address env (Dis.build_env env) str  in
     let ascii   = map p_raw res                                                 in
     let indiv s = init (String.length s) (String.get s) |> map (String.make 1)  in
     let joined  = map indiv ascii |>  map (String.concat "")                    in
@@ -423,7 +422,7 @@ let () =
     (* Save some more space by deleting IR auxdata, only contains ddisasm version anyways *)
     let out_gtirb   = {new_ir with aux_data = []} in
     let serial      = IR.to_proto out_gtirb       in
-    Runtime'.Writer.contents serial
+    Writer.contents serial
   in
 
   (* Reserialise to disk *)
