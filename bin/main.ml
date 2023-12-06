@@ -60,7 +60,7 @@ let opcode_length = 4
 
 (* Protobuf spelunking  *)
 let ast           = "ast"
-let text          = ".text"
+(*let text          = ".text"*)
 
 (* JSON parsing/building  *)
 let hex           = "0x"
@@ -138,10 +138,9 @@ let () =
       )
   in
   let modules     = ir.modules                in
-  let is_text (s : Section.t) = s.name = text in
   let ival_blks   =
     let all_sects = map (fun (m : Module.t) -> m.sections) modules                          in
-    let all_texts = map (filter is_text) all_sects                                          in
+    let all_texts = all_sects                                          in
     let intervals = map2 (fun (s : Section.t) -> s.byte_intervals) all_texts |> map flatten in
     map2 (fun (i : ByteInterval.t)
       -> map (fun b -> {block = b; raw = i.contents; address = i.address}) i.blocks) intervals
@@ -417,7 +416,7 @@ let () =
         -> {m with aux_data = a}) mod_joins in
     (* Save some space by deleting all sections except .text, not necessary *)
     let text_only   = map (fun (m : Module.t)
-        -> {m with sections = filter is_text m.sections}) mod_fixed in
+        -> {m with sections = m.sections}) mod_fixed in
     let new_ir      = {ir with modules = text_only}                 in
     (* Save some more space by deleting IR auxdata, only contains ddisasm version anyways *)
     let out_gtirb   = {new_ir with aux_data = []} in

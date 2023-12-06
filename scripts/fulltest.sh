@@ -8,7 +8,7 @@ echo "This script assumes the directory layout created by build-all.sh."
 echo "Press enter to continue or ctrl-c if this requirement is not met."
 read
 cd ../extras/example-bin
-rm example example.ast example.ast.json example.gtirb example.gts
+rm example example.ast example.ast.json example.gtirb example.gts 
 aarch64-linux-gnu-gcc example.c -o example
 ddisasm example --ir example.gtirb
 cd ../..

@@ -1,0 +1,542 @@
+#===================================
+.arch armv8-a
+#===================================
+
+
+#===================================
+.section .interp ,"a",@progbits
+#===================================
+
+.align 0
+          .string "/lib/ld-linux-aarch64.so.1"
+#===================================
+# end section .interp
+#===================================
+
+#===================================
+.section .note.gnu.build-id ,"a"
+#===================================
+
+.align 2
+          .byte 0x4
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x14
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x3
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x47
+          .byte 0x4e
+          .byte 0x55
+          .byte 0x0
+          .byte 0xbb
+          .byte 0x61
+          .byte 0x5b
+          .byte 0xbb
+          .byte 0x85
+          .byte 0xc4
+          .byte 0x4b
+          .byte 0x45
+          .byte 0x7c
+          .byte 0xce
+          .byte 0xa4
+          .byte 0x35
+          .byte 0xdd
+          .byte 0xb3
+          .byte 0x90
+          .byte 0xd0
+          .byte 0xa4
+          .byte 0x23
+          .byte 0x4
+          .byte 0xb
+#===================================
+# end section .note.gnu.build-id
+#===================================
+
+#===================================
+.section .note.ABI-tag ,"a"
+#===================================
+
+.align 2
+#-----------------------------------
+.type __abi_tag, @object
+.size __abi_tag, 32
+#-----------------------------------
+__abi_tag:
+          .byte 0x4
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x10
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x1
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x47
+          .byte 0x4e
+          .byte 0x55
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x3
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x7
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+          .byte 0x0
+#===================================
+# end section .note.ABI-tag
+#===================================
+
+#===================================
+.section .init ,"ax",@progbits
+#===================================
+
+.align 2
+#-----------------------------------
+.globl __rela_iplt_end_copy
+.type __rela_iplt_end_copy, @notype
+#-----------------------------------
+__rela_iplt_end_copy:
+#-----------------------------------
+.globl _init
+.hidden _init
+.type _init, @function
+#-----------------------------------
+_init:
+
+            nop
+            nop
+            nop
+            nop
+            stp fp,lr,[sp,#-16]!
+            mov fp,sp
+            bl call_weak_fn
+.L_590:
+
+            ldp fp,lr,[sp],#16
+            ret 
+#===================================
+# end section .init
+#===================================
+
+#===================================
+.text
+#===================================
+
+.align 6
+#-----------------------------------
+.globl _start
+.type _start, @function
+#-----------------------------------
+_start:
+
+.cfi_startproc 
+.cfi_lsda 255
+.cfi_personality 255
+.cfi_def_cfa 31, 0
+            nop
+            nop
+            nop
+            nop
+.cfi_undefined 30
+            mov fp,#0
+            mov lr,#0
+            mov x5,x0
+            ldr x1,[sp]
+            add x2,sp,#8
+            mov x6,sp
+            adrp x0, :got:main
+            ldr x0,[x0,:got_lo12:main]
+            mov x3,#0
+            mov x4,#0
+            bl __libc_start_main
+
+            bl abort
+.cfi_endproc 
+#-----------------------------------
+.type call_weak_fn, @function
+#-----------------------------------
+call_weak_fn:
+
+            adrp x0, :got:__gmon_start__
+            ldr x0,[x0,:got_lo12:__gmon_start__]
+            cbz x0,.L_644
+
+            b __gmon_start__
+.L_644:
+
+            ret 
+          .byte 0x1f
+          .byte 0x20
+          .byte 0x3
+          .byte 0xd5
+          .byte 0x1f
+          .byte 0x20
+          .byte 0x3
+          .byte 0xd5
+#-----------------------------------
+.type deregister_tm_clones, @function
+#-----------------------------------
+deregister_tm_clones:
+
+.cfi_startproc 
+.cfi_lsda 255
+.cfi_personality 255
+.cfi_def_cfa 31, 0
+            adrp x0, completed.0
+            add x0,x0, :lo12:completed.0
+            adrp x1, completed.0
+            add x1,x1, :lo12:completed.0
+            cmp x1,x0
+            b.eq .L_67c
+
+            adrp x1, :got:_ITM_deregisterTMCloneTable
+            ldr x1,[x1,:got_lo12:_ITM_deregisterTMCloneTable]
+            cbz x1,.L_67c
+
+            mov x16,x1
+            br x16
+.L_67c:
+
+            ret 
+.cfi_endproc 
+#-----------------------------------
+.type register_tm_clones, @function
+#-----------------------------------
+register_tm_clones:
+
+.cfi_startproc 
+.cfi_lsda 255
+.cfi_personality 255
+.cfi_def_cfa 31, 0
+            adrp x0, completed.0
+            add x0,x0, :lo12:completed.0
+            adrp x1, completed.0
+            add x1,x1, :lo12:completed.0
+            sub x1,x1,x0
+            lsr x2,x1,#63
+            add x1,x2,x1, asr #3
+            asr x1,x1,#1
+            cbz x1,.L_6b8
+
+            adrp x2, :got:_ITM_registerTMCloneTable
+            ldr x2,[x2,:got_lo12:_ITM_registerTMCloneTable]
+            cbz x2,.L_6b8
+
+            mov x16,x2
+            br x16
+.L_6b8:
+
+            ret 
+.cfi_endproc 
+
+            nop
+            nop
+            nop
+            nop
+#-----------------------------------
+.type __do_global_dtors_aux, @function
+#-----------------------------------
+__do_global_dtors_aux:
+
+.cfi_startproc 
+.cfi_lsda 255
+.cfi_personality 255
+.cfi_def_cfa 31, 0
+            stp fp,lr,[sp,#-32]!
+.cfi_def_cfa_offset 32
+.cfi_offset 29, -32
+.cfi_offset 30, -24
+            mov fp,sp
+            str x19,[sp,#16]
+.cfi_offset 19, -16
+            adrp x19, completed.0
+            ldrb w0,[x19,:lo12:completed.0]
+            cbnz w0,.L_6fc
+
+            adrp x0, :got:__cxa_finalize
+            ldr x0,[x0,:got_lo12:__cxa_finalize]
+            cbz x0,.L_6f0
+
+            adrp x0, .L_20008
+            ldr x0,[x0,:lo12:.L_20008]
+            bl __cxa_finalize
+.L_6f0:
+
+            bl deregister_tm_clones
+
+            mov w0,#1
+            strb w0,[x19,:lo12:completed.0]
+.L_6fc:
+
+            ldr x19,[sp,#16]
+            ldp fp,lr,[sp],#32
+.cfi_restore 30
+.cfi_restore 29
+.cfi_restore 19
+.cfi_def_cfa_offset 0
+            ret 
+.cfi_endproc 
+
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+            nop
+#-----------------------------------
+.type frame_dummy, @function
+#-----------------------------------
+frame_dummy:
+
+.cfi_startproc 
+.cfi_lsda 255
+.cfi_personality 255
+.cfi_def_cfa 31, 0
+            b register_tm_clones
+.cfi_endproc 
+.align 2
+#-----------------------------------
+.globl main
+.type main, @function
+#-----------------------------------
+main:
+
+.cfi_startproc 
+.cfi_lsda 255
+.cfi_personality 255
+.cfi_def_cfa 31, 0
+            sub sp,sp,#32
+.cfi_def_cfa_offset 32
+            str w0,[sp,#12]
+            str x1,[sp]
+            mov w0,#99
+            str w0,[sp,#28]
+            mov w0,#0
+            add sp,sp,#32
+.cfi_def_cfa_offset 0
+            ret 
+.cfi_endproc 
+#===================================
+# end section .text
+#===================================
+
+#===================================
+.section .fini ,"ax",@progbits
+#===================================
+
+.align 2
+#-----------------------------------
+.globl _fini
+.hidden _fini
+.type _fini, @function
+#-----------------------------------
+_fini:
+
+            nop
+            nop
+            nop
+            nop
+            stp fp,lr,[sp,#-16]!
+            mov fp,sp
+.L_740:
+
+            ldp fp,lr,[sp],#16
+            ret 
+#===================================
+# end section .fini
+#===================================
+
+#===================================
+.section .rodata ,"a",@progbits
+#===================================
+
+.align 2
+.L_748:
+#-----------------------------------
+.globl _IO_stdin_used
+.type _IO_stdin_used, @object
+.size _IO_stdin_used, 4
+#-----------------------------------
+_IO_stdin_used:
+          .byte 0x1
+          .byte 0x0
+          .byte 0x2
+          .byte 0x0
+#===================================
+# end section .rodata
+#===================================
+
+#===================================
+.section .init_array ,"wa"
+#===================================
+
+.align 3
+#-----------------------------------
+.type __frame_dummy_init_array_entry, @object
+#-----------------------------------
+__frame_dummy_init_array_entry:
+          .quad frame_dummy
+#===================================
+# end section .init_array
+#===================================
+
+#===================================
+.section .fini_array ,"wa"
+#===================================
+
+.align 3
+#-----------------------------------
+.type __do_global_dtors_aux_fini_array_entry, @object
+#-----------------------------------
+__do_global_dtors_aux_fini_array_entry:
+          .quad __do_global_dtors_aux
+#-----------------------------------
+.type _DYNAMIC, @object
+#-----------------------------------
+_DYNAMIC:
+#===================================
+# end section .fini_array
+#===================================
+
+#===================================
+.data
+#===================================
+
+.align 3
+#-----------------------------------
+.weak data_start
+.type data_start, @notype
+#-----------------------------------
+data_start:
+#-----------------------------------
+.globl __data_start
+.type __data_start, @notype
+#-----------------------------------
+__data_start:
+          .zero 8
+.L_20008:
+#-----------------------------------
+.globl __dso_handle
+.hidden __dso_handle
+.type __dso_handle, @object
+#-----------------------------------
+__dso_handle:
+          .quad .L_20008
+#-----------------------------------
+.globl __TMC_END__
+.hidden __TMC_END__
+.type __TMC_END__, @object
+#-----------------------------------
+__TMC_END__:
+#-----------------------------------
+.globl _edata
+.type _edata, @notype
+#-----------------------------------
+_edata:
+#===================================
+# end section .data
+#===================================
+
+#===================================
+.bss
+#===================================
+
+.align 0
+#-----------------------------------
+.type completed.0, @object
+.size completed.0, 1
+#-----------------------------------
+completed.0:
+#-----------------------------------
+.globl __bss_start__
+.type __bss_start__, @notype
+#-----------------------------------
+__bss_start__:
+#-----------------------------------
+.globl __bss_start
+.type __bss_start, @notype
+#-----------------------------------
+__bss_start:
+          .zero 8
+.L_20018:
+#-----------------------------------
+.globl _end
+.type _end, @notype
+#-----------------------------------
+_end:
+#-----------------------------------
+.globl _bss_end__
+.type _bss_end__, @notype
+#-----------------------------------
+_bss_end__:
+#-----------------------------------
+.globl __end__
+.type __end__, @notype
+#-----------------------------------
+__end__:
+#-----------------------------------
+.globl __bss_end__
+.type __bss_end__, @notype
+#-----------------------------------
+__bss_end__:
+#===================================
+# end section .bss
+#===================================
+
+#===================================
+.section .note.GNU-stack ,"",@progbits
+#===================================
+
+.align 0
+#===================================
+# end section .note.GNU-stack
+#===================================
+# WARNING: integral symbol .L_0 may not have been correctly relocated
+.set .L_0, 0
+#-----------------------------------
+.weak _ITM_deregisterTMCloneTable
+.type _ITM_deregisterTMCloneTable, @notype
+#-----------------------------------
+#-----------------------------------
+.weak _ITM_registerTMCloneTable
+.type _ITM_registerTMCloneTable, @notype
+#-----------------------------------
+#-----------------------------------
+.symver __cxa_finalize,__cxa_finalize@GLIBC_2.17
+.weak __cxa_finalize
+.type __cxa_finalize, @function
+#-----------------------------------
+#-----------------------------------
+.weak __gmon_start__
+.type __gmon_start__, @notype
+#-----------------------------------
+#-----------------------------------
+.symver __libc_start_main,__libc_start_main@GLIBC_2.34
+.globl __libc_start_main
+.type __libc_start_main, @function
+#-----------------------------------
+#-----------------------------------
+.symver abort,abort@GLIBC_2.17
+.globl abort
+.type abort, @function
+#-----------------------------------
