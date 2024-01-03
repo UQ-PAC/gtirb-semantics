@@ -58,6 +58,9 @@ let asli_ind      = 4
 let out_ind       = 5
 let opcode_length = 4
 
+let expected_argc = 6
+let usage_string  = " GTIRB_FILE ASLI_PRELUDE MRA_TOOLS_DIR ASLI_DIR OUTPUT_FILE"
+
 (* Protobuf spelunking  *)
 let ast           = "ast"
 (*let text          = ".text"*)
@@ -83,8 +86,9 @@ let path_d        = "/"
 let asl           = ".asl"
 
 (* Compression and bit twiddling  *)
-let asli_base     = Char.code '"'
-let asli_range    = Char.code 'z' - asli_base + 1
+(* note: asli_base and asli_range constrain the permitted symbols for Huffman encoding. *)
+let asli_base     = Char.code '\x00'
+let asli_range    = Char.code '~' - asli_base + 1
 let padding       = '0'
 let left          = "0"
 let right         = "1"
@@ -116,6 +120,10 @@ let () =
   let b_hd op n   = Bytes.sub op 0 n            in
 
   (* BEGINNING *)
+  if (Array.length Sys.argv != expected_argc) then
+    (Printf.eprintf "usage: %s%s\n" Sys.argv.(0) usage_string;
+    raise (Invalid_argument "invalid command line arguments"))
+  else 
   (* Read bytes from the file, skip first 8 *) 
   let bytes = 
     let ic  = open_in Sys.argv.(binary_ind)     in 
@@ -289,8 +297,11 @@ let () =
         if String.length s = 0
         then a
         else
-          let key = (Char.code s.[0]) - asli_base in 
-          (
+          let code = Char.code s.[0] in
+          let key = code - asli_base in  
+          if not (0 <= key && key < asli_range) then 
+            failwith @@ "character out of range for huffman compress, ascii decimal: " ^ Int.to_string code
+          else (
             Array.set a key (a.(key) + 1);
             freqs (stl s) a
           )
