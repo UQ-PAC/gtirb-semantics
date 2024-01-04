@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -xe
 
 EXBIN="gtirb-semantics/extras/example-bin"
 GTSARGS="extras/example-bin/example.gtirb ../asl-interpreter/prelude.asl ../mra_tools ../asl-interpreter extras/example-bin/example.gts"
@@ -12,7 +12,7 @@ rm example example.ast example.ast.json example.gtirb example.gts
 aarch64-linux-gnu-gcc example.c -o example
 ddisasm example --ir example.gtirb
 cd ../..
-dune exec gtirb_semantics $GTSARGS > extras/example-bin/example.ast
+OCAMLRUNPARAM=b dune exec gtirb_semantics $GTSARGS > extras/example-bin/example.ast
 cp extras/example-bin/example.gts ../basli
 cd ../basli
 echo
