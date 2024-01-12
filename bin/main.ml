@@ -26,7 +26,6 @@ type rectified_block = {
 type ast_block = {
   auuid   : bytes;
   asts    : string list list;
-  concat  : string;
 }
 
 (* Wrapper for polymorphic code/data/not-set block pre-rectification  *)
@@ -54,13 +53,6 @@ let ast           = "ast"
 
 (* JSON parsing/building  *)
 let hex           = "0x"
-let l_op          = "["
-let l_dl          = ","
-let l_cl          = "]"
-let strung        = "\""
-let alt_str       = "'"
-let kv_pair       = ":"
-let newline       = "\n"
 
 (* ASL Spec pathing *)
 (* Hardcoding this as it's unlikely to change for a while and adding 200000 cmdline args is pain  *)
@@ -75,8 +67,7 @@ let asl           = ".asl"
 (*  MAIN  *)
 let () = 
   (* Convenience *)
-  let map2 f l = map (map f) l                      in
-  let stl s = String.sub s 1 (String.length s - 1)  in
+  let mapmap f l = map (map f) l                      in
 
   (* Record convenience *)
   let rblock sz id = {
@@ -120,22 +111,22 @@ let () =
       )
   in
   let modules     = ir.modules                in
-  let ival_blks   =
+  let ival_blks : content_block list list  =
     let all_sects = map (fun (m : Module.t) -> m.sections) modules                          in
     let all_texts = all_sects                                          in
-    let intervals = map2 (fun (s : Section.t) -> s.byte_intervals) all_texts |> map flatten in
-    map2 (fun (i : ByteInterval.t)
+    let intervals = mapmap (fun (s : Section.t) -> s.byte_intervals) all_texts |> map flatten in
+    mapmap (fun (i : ByteInterval.t)
       -> map (fun b -> {block = b; raw = i.contents; address = i.address}) i.blocks) intervals
       |> map flatten
   in
 
   (* Resolve polymorphic block variants to isolate only useful info *)
-  let codes_only  = 
-    let rectify   = function
+  let codes_only : rectified_block list list = 
+    let rectify = function
       | `Code (c : CodeBlock.t) -> rblock c.size c.uuid
       | _                       -> rblock 0 empty
     in
-    let poly_blks   = map2 (fun b -> {{{(rectify b.block.value)
+    let poly_blks   = mapmap (fun b -> {{{(rectify b.block.value)
       with offset   = b.block.offset}
       with contents = b.raw}
       with address  = b.address + b.block.offset}) ival_blks
@@ -143,21 +134,21 @@ let () =
     map (filter (fun b -> b.size > 0)) poly_blks in
   
   (* Section up byte interval contents to their respective blocks and take individual opcodes *)
-  let op_cuts   =
-    let trimmed = map2 (fun b -> 
+  let op_cuts : rectified_block list list  =
+    let trimmed = mapmap (fun b -> 
         {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
     let rec cut_ops contents =
       if len contents <= opcode_length then [contents]
       else ((b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length))
     in
-    map2 (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
+    mapmap (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
   in
 
   (* Convert every opcode to big endianness *)
-  let blk_orded =
+  let blk_orded : rectified_block list list =
     let need_flip = map (fun (m : Module.t)
         -> m.byte_order = ByteOrder.LittleEndian) modules in
-    let rec endian_reverse opcode = 
+    let rec endian_reverse opcode: bytes = 
       if len opcode = 1
       then opcode
       else cat (endian_reverse (b_tl opcode 1)) (b_hd opcode 1)                       in
@@ -189,68 +180,36 @@ let () =
   in
 
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli op addr =
-    let p_raw a = 
-      let rec fix_json s =
-        if String.length s = 0
-        then s
-        else (
-          let p = String.sub s 0 1 in
-          let q =
-            (* '"' needs to become '\'' to make json parsing less painful on the basil side *)
-            (* and \n needs to become , to make lists format correctly *)
-              if p = strung
-              then alt_str
-              else (
-                if p = newline
-                then l_dl
-                else p
-              )
-          in 
-          q ^ fix_json (stl s)
-        )
-      in 
-      let s = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim |> fix_json in
-      (
-        (* Display Asli outputs as they arrive 
-        print_endline s;*)
-        s
-      )
-    in
+  let to_asli (op: bytes) (addr : int) : string list =
+    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
     (* Set up and tear down eval environment for every single instruction *)
     let address = Some (string_of_int addr)                                     in
     let env     = Eval.build_evaluation_environment envinfo                     in
     let str     = hex ^ Hexstring.encode op                                     in
     let res     = Dis.retrieveDisassembly ?address env (Dis.build_env env) str  in
-    let ascii   = map p_raw res                                                 in
-    let indiv s = init (String.length s) (String.get s) |> map (String.make 1)  in
-    let joined  = map indiv ascii |>  map (String.concat "")                    in
-    map (fun s -> strung ^ s ^ strung) joined
+    map (fun x -> p_raw x) res
   in
   let rec asts opcodes addr envinfo =
     match opcodes with
     | []      -> []
     | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length) envinfo)
   in
-  let with_asts = map2 (fun b 
+  let with_asts = mapmap (fun b 
     -> {
       auuid   = b.ruuid;
       asts    = (asts b.opcodes b.address envinfo);
-      concat  = ""
     }) blk_orded
   in
 
   (* Massage asli outputs into a format which can
-     be serialised and then deserialised by other tools *)
+     be serialised and then deserialised by other tools  *)
   let serialisable: string list =
-    let l_to_s op d cl l  = op ^ (String.concat d l) ^ cl                             in
-    let jsoned asts       = map (l_to_s l_op l_dl l_cl) asts |> l_to_s l_op l_dl l_cl in
+      let to_list x = `List x  in
+    let jsoned (asts: string list list )  : Yojson.Safe.t = mapmap (fun s -> `String s) asts |> map to_list |> to_list in
     (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
-    let b64 bin   = strung ^ (Bytes.to_string bin |> Base64.encode_exn) ^ strung      in 
-    let json_asts = map2 (fun b -> {b with concat = jsoned b.asts}) with_asts         in
-    let paired    = map2 (fun b -> (b64 b.auuid) ^ kv_pair ^ b.concat) json_asts      in
-    map (String.concat l_dl) paired
-  in
+    let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun b -> (((Base64.encode_exn (Bytes.to_string  b.auuid))), (jsoned b.asts))) l)) with_asts) in
+      map (fun j -> Yojson.Safe.to_string j) paired
+  in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
   let encoded =
