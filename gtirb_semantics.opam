@@ -13,9 +13,9 @@ depends: [
   "ocaml"
   "dune" {>= "3.6"}
   "Yojson"
-  "asli.libASL"
+  "asli"
   "ocaml-protoc-plugin"
-  "hextring"
+  "hexstring"
   "base64"
   "odoc" {with-doc}
 ]
