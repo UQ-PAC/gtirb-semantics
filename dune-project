@@ -19,7 +19,7 @@
  (name gtirb_semantics)
  (synopsis "Add semantic information to the IR of a disassembled ARM64 binary")
  (description "A longer description")
- (depends ocaml dune asli.libASL ocaml-protoc-plugin hextring base64)
+ (depends ocaml dune Yojson asli.libASL ocaml-protoc-plugin hextring base64)
  (tags
   (decompilers instruction-lifters static-analysis)))
 

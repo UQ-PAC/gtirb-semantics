@@ -179,12 +179,11 @@ let () =
     concat (prelude :: mra)
   in
 
+  let env     = Eval.build_evaluation_environment envinfo                     in
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (op: bytes) (addr : int) : string list =
+    let to_asli (op: bytes) (addr : int) : string list =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
-    (* Set up and tear down eval environment for every single instruction *)
     let address = Some (string_of_int addr)                                     in
-    let env     = Eval.build_evaluation_environment envinfo                     in
     let str     = hex ^ Hexstring.encode op                                     in
     let res     = Dis.retrieveDisassembly ?address env (Dis.build_env env) str  in
     map (fun x -> p_raw x) res
