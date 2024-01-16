@@ -12,6 +12,7 @@ bug-reports: "https://github.com/UQ-PAC/gtirb-semantics/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.6"}
+  "Yojson"
   "asli"
   "ocaml-protoc-plugin"
   "hexstring"
