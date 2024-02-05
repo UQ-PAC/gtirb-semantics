@@ -30,26 +30,43 @@ import sys
 import json
 import base64
 import shutil
+import typing
 import pathlib
 import argparse
 import tempfile
 import warnings
 import functools
 import subprocess
+import collections
+import collections.abc
+import multiprocessing.pool
 
 proto_json = pathlib.Path(__file__).parent / 'proto-json.py'
 assert proto_json.exists(), f'\'{proto_json}\' not found.  keep this debug-gts.py in the same folder as proto-json.py'
 llvm_mc = shutil.which('llvm-mc')
 assert llvm_mc, "could not find llvm-mc in PATH, check that llvm is installed."
 
-@functools.lru_cache
-def decode_isn(opcode_bytes):
-  hex = ' '.join(f'0x{x:02x}' for x in opcode_bytes)
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
+def _decode_isns(isns: collections.abc.Iterable[bytes]):
+  hex = ' '.join(f'0x{x:02x}' for opcode_bytes in isns for x in opcode_bytes)
   out = subprocess.check_output([llvm_mc, '--disassemble', '--arch=arm64'],
                                 input=hex, encoding='ascii')
-  return out.strip().split('\n')[-1].strip().replace('\t', ' ')
+  out = out.replace('.text', '', 1).strip()  # discard first .text
+  outs = (x.strip().replace('\t', ' ') for x in out.split('\n'))
+  return dict(zip(isns, outs))
 
-def do_block(uuid, blk, contents: bytes, sem):
+def decode_isns(isns: collections.abc.Iterable[bytes]):
+  out = {}
+  for x in chunks(isns, 1000):
+    out |= _decode_isns(x)
+  return out 
+
+def do_block(uuid, blk, contents: bytes, sem, isn_names: dict[bytes, str]):
   blksize = int(blk['code']['size'])
   off = int(blk['offset'])
 
@@ -66,11 +83,11 @@ def do_block(uuid, blk, contents: bytes, sem):
                   f"semantics: {len(sem)}, gtirb: {blksize / isize}")
 
   return [
-    { decode_isn(slice(i)): sem }
+    { isn_names[slice(i)]: sem }
     for i, sem in enumerate(sem)
   ]
 
-def do_module(mod):
+def do_module(mod, isn_names: dict[bytes, str]):
   sems = mod['aux_data']['ast']['data']
   sems = base64.b64decode(sems)
   sems = json.loads(sems)
@@ -85,7 +102,7 @@ def do_module(mod):
       for blk in ival['blocks']:
         if 'code' not in blk: continue
         uuid = blk['code']['uuid']
-        out |= { uuid: do_block(uuid, blk, contents, sems[uuid]) }
+        out[uuid] = do_block(uuid, blk, contents, sems[uuid], isn_names)
         gtirb_ids.add(uuid)
 
   if gtirb_ids != sem_ids:
@@ -111,10 +128,19 @@ def main():
     f.seek(0)
     data = json.load(f)
 
-  # nb: flattens all blocks in the gts file into one dict
   out = []
+  # traverse protobuf twice. first, to find all isn bytes, then to apply them.
+  isns = collections.defaultdict(str)
   for mod in data['modules']:
-    out.append(do_module(mod))
+    do_module(mod, isns)
+
+  print('decoding', len(isns), 'opcodes...', file=sys.stderr, end=' ', flush=True)
+  isn_names = decode_isns(tuple(isns.keys()))
+  print('done', file=sys.stderr)
+  assert len(isn_names) == len(isns), f"llvm-mc instruction count mismatch {len(isn_names)=} {len(isns)=}"
+
+  for mod in data['modules']:
+    out.append(do_module(mod, isn_names))
 
   json.dump(out, args.json_output, indent=2)
   args.json_output.write('\n')
