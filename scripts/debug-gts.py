@@ -51,6 +51,8 @@ except ImportError:
   print('    source path/to/venv/bin/activate', file=sys.stderr)
   print('    pip install gtirb', file=sys.stderr)
   print('', file=sys.stderr)
+  print('If you are seeing this error within a Nix package, this has been incorrectly packaged.', file=sys.stderr)
+  print('', file=sys.stderr)
   raise
 import base64
 import shutil
