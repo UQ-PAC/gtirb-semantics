@@ -179,14 +179,22 @@ let () =
     concat (prelude :: mra)
   in
 
-  let env     = Eval.build_evaluation_environment envinfo                     in
+  let env     = Eval.build_evaluation_environment envinfo                      in
+  Printexc.record_backtrace true;
   (* Evaluate each instruction one by one with a new environment for each *)
-    let to_asli (op: bytes) (addr : int) : string list =
+  let to_asli (op: bytes) (addr : int) : string list =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
-    let address = Some (string_of_int addr)                                     in
-    let str     = hex ^ Hexstring.encode op                                     in
-    let res     = Dis.retrieveDisassembly ?address env (Dis.build_env env) str  in
-    map (fun x -> p_raw x) res
+    let address = Some (string_of_int addr)                                    in
+    let str     = hex ^ Hexstring.encode op                                    in
+    let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
+    match (Dis.retrieveDisassembly ?address env (Dis.build_env env) str) with
+    | res -> map (fun x -> p_raw x) res
+    | exception exc ->
+      Printf.eprintf
+        "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
+        str str_bytes (Printexc.to_string exc);
+      Printexc.print_backtrace stderr;
+      exit 1
   in
   let rec asts opcodes addr envinfo =
     match opcodes with
