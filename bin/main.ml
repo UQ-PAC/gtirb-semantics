@@ -179,22 +179,41 @@ let () =
     concat (prelude :: mra)
   in
 
-  let env     = Eval.build_evaluation_environment envinfo                      in
+  let tbl : (bytes, string list) Hashtbl.t = Hashtbl.create 10000 in
+  List.iter
+    (fun op -> Hashtbl.replace tbl op [])
+    List.(concat_map (fun x -> x.opcodes) @@ flatten blk_orded);
+  let tbl_update k f =
+    match Hashtbl.find_opt tbl k with
+    | Some x -> x
+    | None -> let x = f () in (Hashtbl.replace tbl k x; x)
+  in
+  (* Printf.printf "%d unique ops\n" Hashtbl.(length tbl); *)
+  (* flush stdout; *)
+
   Printexc.record_backtrace true;
+  let env =
+    match Eval.aarch64_evaluation_environment () with
+    | Some e -> e
+    | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
+  in
+
   (* Evaluate each instruction one by one with a new environment for each *)
   let to_asli (op: bytes) (addr : int) : string list =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
     let address = Some (string_of_int addr)                                    in
     let str     = hex ^ Hexstring.encode op                                    in
     let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
-    match (Dis.retrieveDisassembly ?address env (Dis.build_env env) str) with
-    | res -> map (fun x -> p_raw x) res
-    | exception exc ->
-      Printf.eprintf
-        "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
-        str str_bytes (Printexc.to_string exc);
-      Printexc.print_backtrace stderr;
-      exit 1
+    let do_dis () =
+      (match (Dis.retrieveDisassembly ?address env (Dis.build_env env) str) with
+      | res -> map (fun x -> p_raw x) res
+      | exception exc ->
+        Printf.eprintf
+          "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
+          str str_bytes (Printexc.to_string exc);
+        Printexc.print_backtrace stderr;
+        exit 1)
+    in tbl_update op (do_dis)
   in
   let rec asts opcodes addr envinfo =
     match opcodes with
