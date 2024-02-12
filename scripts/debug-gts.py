@@ -127,7 +127,7 @@ def compute_friendly_names(mod: gtirb.Module) -> dict[uuid.UUID, str]:
 
   return out
 
-def friendly_block(mod: gtirb.Module, blk: gtirb.Block, with_uuid=False, *, _block_to_func: dict[uuid.UUID, str] = {}):
+def friendly_block(mod: gtirb.Module, blk: gtirb.Block, symMap,  with_uuid=False, *, _block_to_func: dict[uuid.UUID, str] = {}):
   if not _block_to_func:
     _block_to_func |= compute_friendly_names(mod)
 
@@ -135,11 +135,19 @@ def friendly_block(mod: gtirb.Module, blk: gtirb.Block, with_uuid=False, *, _blo
   prefix = '' if not with_uuid else b64_uuid(uuid) + ' / '
   if isinstance(blk, gtirb.CodeBlock):
     return prefix + _block_to_func[uuid]
+  elif isinstance(blk, gtirb.ProxyBlock):
+    if uuid in symMap: 
+      return prefix + f'({type(blk).__name__})' + ' / ' + symMap[uuid].name
+    else :
+      return prefix + "Unresolved " + f'{type(blk).__name__}' 
+
   return prefix + f'({type(blk).__name__})'
 
 def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
   sems = mod.aux_data['ast'].data
   sems = json.loads(sems)
+
+  symMap = dict([(sym.referent.uuid, sym) for sym in mod.symbols if isinstance(sym.referent, gtirb.ProxyBlock)])
 
   gtirb_ids = set()
   sem_ids = set(sems.keys())
@@ -151,13 +159,13 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
         uuid = blk.uuid
 
         b64 = b64_uuid(uuid)
-        friendly = friendly_block(mod, blk)
+        friendly = friendly_block(mod, blk, symMap)
         out[b64] = {
           'name': friendly,
           'address': blk.address,
           'code': do_block(friendly, blk, bytes(blk.byte_interval.contents), sems[b64], isn_names), # type: ignore
           'successors': {
-            friendly_block(mod, x.target, True) : str(x.label) for x in blk.outgoing_edges
+            friendly_block(mod, x.target, symMap, True) : str(x.label) for x in blk.outgoing_edges
           },
         }
         gtirb_ids.add(b64)
