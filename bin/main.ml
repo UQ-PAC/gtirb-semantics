@@ -43,7 +43,7 @@ let opcode_length = 4
 
 
 let expected_argc = 3  (* including arg0 *)
-let usage_string  = " GTIRB_FILE OUTPUT_FILE"
+let usage_string  = "GTIRB_FILE OUTPUT_FILE"
 (* ASL specifications are from the bundled ARM semantics in libASL. *)
 
 (* Protobuf spelunking  *)
@@ -75,10 +75,13 @@ let () =
   let b_hd op n   = Bytes.sub op 0 n            in
 
   (* BEGINNING *)
+  let usage () =
+    (Printf.eprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string) in
+  if (Array.mem "--help" Sys.argv) then
+    (usage (); exit 0);
   if (Array.length Sys.argv != expected_argc) then
-    (Printf.eprintf "usage: %s%s\n" Sys.argv.(0) usage_string;
-    raise (Invalid_argument "invalid command line arguments"))
-  else 
+    (usage (); raise (Invalid_argument "invalid command line arguments"));
+
   (* Read bytes from the file, skip first 8 *) 
   let bytes = 
     let ic  = open_in Sys.argv.(binary_ind)     in 
