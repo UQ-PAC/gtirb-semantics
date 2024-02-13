@@ -8,6 +8,7 @@ open Gtirb_semantics.AuxData.Gtirb.Proto
 open LibASL
 open Bytes
 open List
+open Llvm_disas
 
 (* TYPES  *)
 
@@ -22,11 +23,21 @@ type rectified_block = {
   size      : int;
 }
 
+type instruction_semantics = {
+  address: int;
+  opcode_le: string;
+  opcode_be: string;
+  readable: string option;
+  statementlist: string list;
+}
+
 (* ASLi semantic info for a block *)
 type ast_block = {
   auuid   : bytes;
-  asts    : string list list;
+  address : int;
+  asts    : instruction_semantics list;
 }
+
 
 (* Wrapper for polymorphic code/data/not-set block pre-rectification  *)
 type content_block = {
@@ -178,23 +189,27 @@ let () =
     let mra     = map (fun t -> LoadASL.read_file t false false) specs      in
     concat (prelude :: mra)
   in
-
   let env     = Eval.build_evaluation_environment envinfo                      in
   Printexc.record_backtrace true;
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (op: bytes) (addr : int) : string list =
+  let to_asli (op: bytes) (addr : int) : instruction_semantics =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
     let address = Some (string_of_int addr)                                    in
-    let str     = hex ^ Hexstring.encode op                                    in
+    let str op    = hex ^ Hexstring.encode op                                    in
+    let rev (b: bytes) : bytes = Bytes.mapi (fun i _ -> (Bytes.get b ((Bytes.length b - 1) - i))) b 
+    in 
     let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
-    match (Dis.retrieveDisassembly ?address env (Dis.build_env env) str) with
+    let insns = match (Dis.retrieveDisassembly ?address env (Dis.build_env env) (str op)) with
     | res -> map (fun x -> p_raw x) res
     | exception exc ->
       Printf.eprintf
         "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
-        str str_bytes (Printexc.to_string exc);
+        (str op) str_bytes (Printexc.to_string exc);
       Printexc.print_backtrace stderr;
-      exit 1
+      exit 1 
+      in
+    let opcode_le = String.concat " " (List.of_seq (Seq.map (fun f -> (Printf.sprintf "%02x" (Char.code f))) (Bytes.to_seq (rev op)))) in
+      {address = addr; opcode_be = (str op); opcode_le = opcode_le; readable = assembly_of_bytes_opt (rev op); statementlist = insns}
   in
   let rec asts opcodes addr envinfo =
     match opcodes with
@@ -204,17 +219,32 @@ let () =
   let with_asts = mapmap (fun b 
     -> {
       auuid   = b.ruuid;
+      address = b.address;
       asts    = (asts b.opcodes b.address envinfo);
     }) blk_orded
   in
 
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
+  let yojson_instsem (s: instruction_semantics) = 
+      `Assoc (List.append [ ("sem", `List (List.map (fun s -> `String s) s.statementlist)); ("addr", `Int s.address); 
+          ("opcode_le", `String s.opcode_le); ("opcode_be", `String s.opcode_be)] (
+        match s.readable with 
+        | Some x -> [("instr", `String x)]
+        | None -> []
+        ))
+      in
   let serialisable: string list =
       let to_list x = `List x  in
-    let jsoned (asts: string list list )  : Yojson.Safe.t = mapmap (fun s -> `String s) asts |> map to_list |> to_list in
+    let jsoned (asts: instruction_semantics list )  : Yojson.Safe.t = map (fun s -> yojson_instsem s) asts |>  to_list in
     (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
-    let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun b -> (((Base64.encode_exn (Bytes.to_string  b.auuid))), (jsoned b.asts))) l)) with_asts) in
+    let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun (b: ast_block) -> (((Base64.encode_exn (Bytes.to_string  b.auuid)), 
+        (`Assoc [
+          ("addr", `Int b.address);
+          ("instr", (jsoned b.asts))
+        ])) 
+      )) l)) with_asts) in
+      List.iter (fun f -> Yojson.Safe.pretty_to_channel stdout f) paired;
       map (fun j -> Yojson.Safe.to_string j) paired
   in 
 

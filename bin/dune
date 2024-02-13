@@ -1,4 +1,14 @@
 (executable
  (public_name gtirb_semantics)
  (name main)
- (libraries base64 yojson gtirb_semantics asli.libASL))
+ (modules main)
+ (libraries gtirb_semantics base64 yojson asli.libASL  llvm_disas)
+  (flags     :standard -cclib (:include llvmconf.sexp))
+  )
+
+(rule 
+  (targets llvmconf.sexp)
+ (action (bash "$(opam var conf-llvm:config) --libs >> llvmconf.sexp"))
+  )
+
+
