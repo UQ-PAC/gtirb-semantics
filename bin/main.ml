@@ -38,14 +38,13 @@ type content_block = {
 (* CONSTANTS  *)
 (* Argv       *)
 let binary_ind    = 1
-let prelude_ind   = 2
-let mra_ind       = 3
-let asli_ind      = 4
-let out_ind       = 5
+let out_ind       = 2
 let opcode_length = 4
 
-let expected_argc = 6
-let usage_string  = " GTIRB_FILE ASLI_PRELUDE MRA_TOOLS_DIR ASLI_DIR OUTPUT_FILE"
+
+let expected_argc = 3  (* including arg0 *)
+let usage_string  = " GTIRB_FILE OUTPUT_FILE"
+(* ASL specifications are from the bundled ARM semantics in libASL. *)
 
 (* Protobuf spelunking  *)
 let ast           = "ast"
@@ -54,15 +53,6 @@ let ast           = "ast"
 (* JSON parsing/building  *)
 let hex           = "0x"
 
-(* ASL Spec pathing *)
-(* Hardcoding this as it's unlikely to change for a while and adding 200000 cmdline args is pain  *)
-let arch          = "regs-arch-arch_instrs-arch_decode"
-let support       = "aes-barriers-debug-feature-hints-interrupts-memory-stubs-fetchdecode"
-let test          = "override-test"
-let types         = "types"
-let spec_d        = '-'
-let path_d        = "/"
-let asl           = ".asl"
 
 (*  MAIN  *)
 let () = 
@@ -162,23 +152,7 @@ let () =
     map fix_mod pairs
   in
 
-  (* Organise specs to allow for ASLi evaluation environment setup *)
-  let envinfo =
-    let spc_dir = Sys.argv.(mra_ind)                                        in
-    let take_paths p sdir fs = String.split_on_char spec_d fs |> 
-        map (fun f -> p ^ path_d ^ sdir ^ path_d ^ f ^ asl)                 in
-    let add_types l = (hd l) :: (spc_dir ^ path_d ^ types ^ asl) :: (tl l)  in
-    let arches  = take_paths spc_dir "arch" arch                            in
-    let support = take_paths spc_dir "support" support                      in
-    let tests   = take_paths Sys.argv.(asli_ind) "tests" test               in
-    let prel    = Sys.argv.(prelude_ind)                                    in
-    let w_types = add_types arches                                          in
-    let specs   = w_types @ support @ tests                                 in
-    let prelude = LoadASL.read_file prel true false                         in
-    let mra     = map (fun t -> LoadASL.read_file t false false) specs      in
-    concat (prelude :: mra)
-  in
-
+  (* hashtable for memoising disassembly results by opcode. *)
   let tbl : (bytes, string list) Hashtbl.t = Hashtbl.create 10000 in
   List.iter
     (fun op -> Hashtbl.replace tbl op [])
@@ -215,15 +189,15 @@ let () =
         exit 1)
     in tbl_update op (do_dis)
   in
-  let rec asts opcodes addr envinfo =
+  let rec asts opcodes addr =
     match opcodes with
     | []      -> []
-    | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length) envinfo)
+    | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length))
   in
   let with_asts = mapmap (fun b 
     -> {
       auuid   = b.ruuid;
-      asts    = (asts b.opcodes b.address envinfo);
+      asts    = (asts b.opcodes b.address);
     }) blk_orded
   in
 
