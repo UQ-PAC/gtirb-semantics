@@ -5,6 +5,7 @@ open Gtirb_semantics.Module.Gtirb.Proto
 open Gtirb_semantics.Section.Gtirb.Proto
 open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
+open Gtirb_semantics.Symbol.Gtirb.Proto
 open LibASL
 open Bytes
 open List
@@ -34,6 +35,7 @@ type instruction_semantics = {
 (* ASLi semantic info for a block *)
 type ast_block = {
   auuid   : bytes;
+  label: string option;
   address : int;
   asts    : instruction_semantics list;
 }
@@ -155,6 +157,13 @@ let () =
     mapmap (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
   in
 
+  let symmap = Hashtbl.create (List.fold_left (+) 0 (List.map (fun (m: Module.t) -> List.length m.symbols) ir.modules)) in
+  List.iter (fun (m: Module.t) -> (List.iter (fun (s: Symbol.t) -> 
+      match s.optional_payload with 
+      | `Referent_uuid b -> Hashtbl.add symmap b s
+        | _ ->  () 
+    ) m.symbols))
+      modules;
   (* Convert every opcode to big endianness *)
   let blk_orded : rectified_block list list =
     let need_flip = map (fun (m : Module.t)
@@ -221,28 +230,36 @@ let () =
       auuid   = b.ruuid;
       address = b.address;
       asts    = (asts b.opcodes b.address envinfo);
+      label   = Option.map (fun (s: Symbol.t) -> s.name) (Hashtbl.find_opt symmap b.ruuid)
     }) blk_orded
   in
 
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
   let yojson_instsem (s: instruction_semantics) = 
-      `Assoc (List.append [ ("sem", `List (List.map (fun s -> `String s) s.statementlist)); ("addr", `Int s.address); 
-          ("opcode_le", `String s.opcode_le); ("opcode_be", `String s.opcode_be)] (
-        match s.readable with 
-        | Some x -> [("instr", `String x)]
-        | None -> []
-        ))
+      `Assoc (List.append  (match s.readable with 
+        | Some x -> [("assembly", `String x)]
+        | None -> [])
+        [ ("addr", `Int s.address); 
+          ("opcode_le", `String s.opcode_le); ("opcode_be", `String s.opcode_be) ; 
+          ("semantics", `List (List.map (fun s -> `String s) s.statementlist)) ] 
+        )
       in
   let serialisable: string list =
       let to_list x = `List x  in
     let jsoned (asts: instruction_semantics list )  : Yojson.Safe.t = map (fun s -> yojson_instsem s) asts |>  to_list in
     (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
     let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun (b: ast_block) -> (((Base64.encode_exn (Bytes.to_string  b.auuid)), 
-        (`Assoc [
+        (`Assoc (List.append  (match b.label with 
+              | Some l -> [("label", `String l)]
+              | None -> []
+          )
+        [
           ("addr", `Int b.address);
-          ("instr", (jsoned b.asts))
-        ])) 
+          ("instructions", (jsoned b.asts))
+        ]
+        )
+        )) 
       )) l)) with_asts) in
       List.iter (fun f -> Yojson.Safe.pretty_to_channel stdout f) paired;
       map (fun j -> Yojson.Safe.to_string j) paired
