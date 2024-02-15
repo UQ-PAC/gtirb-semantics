@@ -51,14 +51,13 @@ type content_block = {
 (* CONSTANTS  *)
 (* Argv       *)
 let binary_ind    = 1
-let prelude_ind   = 2
-let mra_ind       = 3
-let asli_ind      = 4
-let out_ind       = 5
+let out_ind       = 2
 let opcode_length = 4
 
-let expected_argc = 6
-let usage_string  = " GTIRB_FILE ASLI_PRELUDE MRA_TOOLS_DIR ASLI_DIR OUTPUT_FILE"
+
+let expected_argc = 3  (* including arg0 *)
+let usage_string  = "GTIRB_FILE OUTPUT_FILE"
+(* ASL specifications are from the bundled ARM semantics in libASL. *)
 
 (* Protobuf spelunking  *)
 let ast           = "ast"
@@ -67,15 +66,6 @@ let ast           = "ast"
 (* JSON parsing/building  *)
 let hex           = "0x"
 
-(* ASL Spec pathing *)
-(* Hardcoding this as it's unlikely to change for a while and adding 200000 cmdline args is pain  *)
-let arch          = "regs-arch-arch_instrs-arch_decode"
-let support       = "aes-barriers-debug-feature-hints-interrupts-memory-stubs-fetchdecode"
-let test          = "override-test"
-let types         = "types"
-let spec_d        = '-'
-let path_d        = "/"
-let asl           = ".asl"
 
 (*  MAIN  *)
 let () = 
@@ -98,10 +88,13 @@ let () =
   let b_hd op n   = Bytes.sub op 0 n            in
 
   (* BEGINNING *)
+  let usage () =
+    (Printf.eprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string) in
+  if (Array.mem "--help" Sys.argv) then
+    (usage (); exit 0);
   if (Array.length Sys.argv != expected_argc) then
-    (Printf.eprintf "usage: %s%s\n" Sys.argv.(0) usage_string;
-    raise (Invalid_argument "invalid command line arguments"))
-  else 
+    (usage (); raise (Invalid_argument "invalid command line arguments"));
+
   (* Read bytes from the file, skip first 8 *) 
   let bytes = 
     let ic  = open_in Sys.argv.(binary_ind)     in 
@@ -182,24 +175,21 @@ let () =
     map fix_mod pairs
   in
 
-  (* Organise specs to allow for ASLi evaluation environment setup *)
-  let envinfo =
-    let spc_dir = Sys.argv.(mra_ind)                                        in
-    let take_paths p sdir fs = String.split_on_char spec_d fs |> 
-        map (fun f -> p ^ path_d ^ sdir ^ path_d ^ f ^ asl)                 in
-    let add_types l = (hd l) :: (spc_dir ^ path_d ^ types ^ asl) :: (tl l)  in
-    let arches  = take_paths spc_dir "arch" arch                            in
-    let support = take_paths spc_dir "support" support                      in
-    let tests   = take_paths Sys.argv.(asli_ind) "tests" test               in
-    let prel    = Sys.argv.(prelude_ind)                                    in
-    let w_types = add_types arches                                          in
-    let specs   = w_types @ support @ tests                                 in
-    let prelude = LoadASL.read_file prel true false                         in
-    let mra     = map (fun t -> LoadASL.read_file t false false) specs      in
-    concat (prelude :: mra)
+  (* hashtable for memoising disassembly results by opcode. *)
+  let tbl : (bytes, (string list)) Hashtbl.t = Hashtbl.create 10000 in
+  let tbl_update k f =
+    match Hashtbl.find_opt tbl k with
+    | Some x -> x
+    | None -> let x = f () in (Hashtbl.replace tbl k x; x)
   in
-  let env     = Eval.build_evaluation_environment envinfo                      in
+  (* Printf.printf "%d unique ops\n" Hashtbl.(length tbl); *)
+  (* flush stdout; *)
   Printexc.record_backtrace true;
+  let env =
+    match Eval.aarch64_evaluation_environment () with
+    | Some e -> e
+    | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
+  in
   (* Evaluate each instruction one by one with a new environment for each *)
   let to_asli (op: bytes) (addr : int) : instruction_semantics =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
@@ -208,28 +198,30 @@ let () =
     let rev (b: bytes) : bytes = Bytes.mapi (fun i _ -> (Bytes.get b ((Bytes.length b - 1) - i))) b 
     in 
     let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
-    let insns = match (Dis.retrieveDisassembly ?address env (Dis.build_env env) (str op)) with
-    | res -> map (fun x -> p_raw x) res
-    | exception exc ->
-      Printf.eprintf
-        "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
-        (str op) str_bytes (Printexc.to_string exc);
-      Printexc.print_backtrace stderr;
-      exit 1 
-      in
+    let do_dis () =
+      (match (Dis.retrieveDisassembly ?address env (Dis.build_env env) (str op)) with
+      | res -> map (fun x -> p_raw x) res
+      | exception exc ->
+        Printf.eprintf
+          "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
+          (str op) str_bytes (Printexc.to_string exc);
+        Printexc.print_backtrace stderr;
+        exit 1)
+    in let insns = tbl_update op (do_dis) 
+  in
     let opcode_le = String.concat " " (List.of_seq (Seq.map (fun f -> (Printf.sprintf "%02x" (Char.code f))) (Bytes.to_seq (rev op)))) in
       {address = addr; opcode_be = (str op); opcode_le = opcode_le; readable = assembly_of_bytes_opt (rev op); statementlist = insns}
   in
-  let rec asts opcodes addr envinfo =
+  let rec asts opcodes addr =
     match opcodes with
     | []      -> []
-    | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length) envinfo)
+    | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length))
   in
   let with_asts = mapmap (fun b 
     -> {
       auuid   = b.ruuid;
       address = b.address;
-      asts    = (asts b.opcodes b.address envinfo);
+      asts    = (asts b.opcodes b.address);
       label   = Option.map (fun (s: Symbol.t) -> s.name) (Hashtbl.find_opt symmap b.ruuid)
     }) blk_orded
   in
