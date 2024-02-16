@@ -123,13 +123,13 @@ def compute_friendly_names(mod: gtirb.Module) -> dict[uuid.UUID, str]:
     blks = sorted(blks, key=lambda blk: blk.address) # type: ignore
     for i, blk in enumerate(blks, 1):
       entry = ' [entry]' if blk in funentries[func] else ''
-      outgoingEdges = next(blk.outgoing_edges, None)
-      proxyName= '' 
-      if outgoingEdges is not None:
-        proxy = next(blk.outgoing_edges).target
-        proxyRef = next(proxy.references, None) if isinstance(proxy, gtirb.ProxyBlock) else None
-        proxyName = f" ({proxyRef.name})" if proxyRef is not None else ''
-      out[blk.uuid] = funnames[func].name + proxyName + entry + ' [{i:>{w}}/{l}]'.format(i=i, l=l, w=len(l))
+      outgoing = next(blk.outgoing_edges, None)
+      proxy_name = ''
+      if outgoing:
+        proxy = outgoing.target
+        proxy_ref = next(proxy.references, None) if isinstance(proxy, gtirb.ProxyBlock) else None
+        proxy_name = f" ({proxy_ref.name})" if proxy_ref else ''
+      out[blk.uuid] = funnames[func].name + proxy_name + entry + ' [{i:>{w}}/{l}]'.format(i=i, l=l, w=len(l))
 
   return out
 
