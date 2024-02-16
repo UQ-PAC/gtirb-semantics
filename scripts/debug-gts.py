@@ -123,11 +123,17 @@ def compute_friendly_names(mod: gtirb.Module) -> dict[uuid.UUID, str]:
     blks = sorted(blks, key=lambda blk: blk.address) # type: ignore
     for i, blk in enumerate(blks, 1):
       entry = ' [entry]' if blk in funentries[func] else ''
-      out[blk.uuid] = funnames[func].name + entry + ' [{i:>{w}}/{l}]'.format(i=i, l=l, w=len(l))
+      outgoing = next(blk.outgoing_edges, None)
+      proxy_name = ''
+      if outgoing:
+        proxy = outgoing.target
+        proxy_ref = next(proxy.references, None) if isinstance(proxy, gtirb.ProxyBlock) else None
+        proxy_name = f" ({proxy_ref.name})" if proxy_ref else ''
+      out[blk.uuid] = funnames[func].name + proxy_name + entry + ' [{i:>{w}}/{l}]'.format(i=i, l=l, w=len(l))
 
   return out
 
-def friendly_block(mod: gtirb.Module, blk: gtirb.Block, symMap,  with_uuid=False, *, _block_to_func: dict[uuid.UUID, str] = {}):
+def friendly_block(mod: gtirb.Module, blk: gtirb.Block, with_uuid=False, *, _block_to_func: dict[uuid.UUID, str] = {}):
   if not _block_to_func:
     _block_to_func |= compute_friendly_names(mod)
 
@@ -136,8 +142,9 @@ def friendly_block(mod: gtirb.Module, blk: gtirb.Block, symMap,  with_uuid=False
   if isinstance(blk, gtirb.CodeBlock):
     return prefix + _block_to_func[uuid]
   elif isinstance(blk, gtirb.ProxyBlock):
-    if uuid in symMap: 
-      return prefix + f'({type(blk).__name__})' + ' / ' + symMap[uuid].name
+    ref = next(blk.references, None)
+    if ref is not None: 
+      return prefix + f'({type(blk).__name__})' + ' / ' + ref.name
     else :
       return prefix + "Unresolved " + f'{type(blk).__name__}' 
 
@@ -147,7 +154,6 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
   sems = mod.aux_data['ast'].data
   sems = json.loads(sems)
 
-  symMap = dict([(sym.referent.uuid, sym) for sym in mod.symbols if isinstance(sym.referent, gtirb.ProxyBlock)])
 
   gtirb_ids = set()
   sem_ids = set(sems.keys())
@@ -159,13 +165,13 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
         uuid = blk.uuid
 
         b64 = b64_uuid(uuid)
-        friendly = friendly_block(mod, blk, symMap)
+        friendly = friendly_block(mod, blk)
         out[b64] = {
           'name': friendly,
           'address': blk.address,
           'code': do_block(friendly, blk, bytes(blk.byte_interval.contents), sems[b64], isn_names), # type: ignore
           'successors': {
-            friendly_block(mod, x.target, symMap, True) : str(x.label) for x in blk.outgoing_edges
+            friendly_block(mod, x.target, True) : str(x.label) for x in blk.outgoing_edges
           },
         }
         gtirb_ids.add(b64)
