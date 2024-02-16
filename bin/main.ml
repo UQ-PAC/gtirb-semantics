@@ -157,16 +157,11 @@ let () =
 
   (* hashtable for memoising disassembly results by opcode. *)
   let tbl : (bytes, string list) Hashtbl.t = Hashtbl.create 10000 in
-  List.iter
-    (fun op -> Hashtbl.replace tbl op [])
-    List.(concat_map (fun x -> x.opcodes) @@ flatten blk_orded);
   let tbl_update k f =
     match Hashtbl.find_opt tbl k with
     | Some x -> x
     | None -> let x = f () in (Hashtbl.replace tbl k x; x)
   in
-  (* Printf.printf "%d unique ops\n" Hashtbl.(length tbl); *)
-  (* flush stdout; *)
 
   Printexc.record_backtrace true;
   let env =
@@ -190,7 +185,7 @@ let () =
           str str_bytes (Printexc.to_string exc);
         Printexc.print_backtrace stderr;
         exit 1)
-    in tbl_update op (do_dis)
+    in tbl_update op do_dis
   in
   let rec asts opcodes addr =
     match opcodes with
