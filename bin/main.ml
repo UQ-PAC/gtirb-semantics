@@ -30,6 +30,7 @@ type instruction_semantics = {
   opcode_be: string;
   readable: string option;
   statementlist: string list;
+  pretty_statementlist: string list;
 }
 
 (* ASLi semantic info for a block *)
@@ -176,7 +177,7 @@ let () =
   in
 
   (* hashtable for memoising disassembly results by opcode. *)
-  let tbl : (bytes, string list) Hashtbl.t = Hashtbl.create 10000 in
+  let tbl : (bytes, ((string list) * (string list))) Hashtbl.t = Hashtbl.create 10000 in
   let tbl_update k f =
     match Hashtbl.find_opt tbl k with
     | Some x -> x
@@ -193,14 +194,15 @@ let () =
   (* Evaluate each instruction one by one with a new environment for each *)
   let to_asli (op: bytes) (addr : int) : instruction_semantics =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
+    let p_pretty a = Asl_utils.pp_stmt a |> String.trim in
     let address = Some (string_of_int addr)                                    in
     let str op    = hex ^ Hexstring.encode op                                    in
     let rev (b: bytes) : bytes = Bytes.mapi (fun i _ -> (Bytes.get b ((Bytes.length b - 1) - i))) b 
     in 
     let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
     let do_dis () =
-      (match (Dis.retrieveDisassembly ?address env (Dis.build_env env) str) with
-      | res -> map (fun x -> p_raw x) res
+      (match (Dis.retrieveDisassembly ?address env (Dis.build_env env) (str op)) with
+      | res -> (map p_raw res, map p_pretty res)
       | exception exc ->
         Printf.eprintf
           "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
@@ -208,9 +210,12 @@ let () =
         Printexc.print_backtrace stderr;
         exit 1)
     in
-    let insns = tbl_update op do_dis in
+    let insns_raw, insns_pretty = tbl_update op do_dis in
     let opcode_le = String.concat " " (List.of_seq (Seq.map (fun f -> (Printf.sprintf "%02x" (Char.code f))) (Bytes.to_seq (rev op)))) in
-      {address = addr; opcode_be = (str op); opcode_le = opcode_le; readable = assembly_of_bytes_opt (rev op); statementlist = insns}
+      {address = addr; opcode_be = (str op); opcode_le = opcode_le; readable = assembly_of_bytes_opt (rev op);
+      statementlist = insns_raw;
+      pretty_statementlist = insns_pretty
+    }
   in
   let rec asts opcodes addr =
     match opcodes with
@@ -232,10 +237,12 @@ let () =
       `Assoc (List.append  (match s.readable with 
         | Some x -> [("assembly", `String x)]
         | None -> [])
-        [ ("addr", `Int s.address); 
-          ("opcode_le", `String s.opcode_le); ("opcode_be", `String s.opcode_be) ; 
-          ("semantics", `List (List.map (fun s -> `String s) s.statementlist)) ] 
-        )
+        [ ("addr", `Int s.address);
+          ("opcode_le", `String s.opcode_le); ("opcode_be", `String s.opcode_be);
+          ("semantics", `List (List.map (fun s -> `String s) s.statementlist));
+          ("pretty_semantics", `List (List.map (fun s -> `String s) s.pretty_statementlist));
+        ]
+      )
       in
   let serialisable: string list =
       let to_list x = `List x  in
