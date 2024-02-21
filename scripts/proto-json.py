@@ -152,7 +152,7 @@ def main():
       preserving_proto_field_name=True
     )
 
-    data = json.dumps(msgdict, sort_keys=True, indent=1)
+    data = json.dumps(msgdict, sort_keys=True, indent=0)
     args.output.write(data.encode('utf-8'))
 
 
