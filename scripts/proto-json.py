@@ -54,7 +54,7 @@ def die(*args) -> typing.NoReturn:
   sys.exit(1)
 
 def main():
-  logging.basicConfig(level=logging.DEBUG)
+  logging.basicConfig(level=logging.WARN)
 
   _gtirb = ['__gtirb__']
   _gtirb_ir_type = 'gtirb.proto.IR'
