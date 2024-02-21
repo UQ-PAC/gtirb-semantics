@@ -61,14 +61,32 @@ def main():
 
   argp = argparse.ArgumentParser(description='protobuf <-> json converter.')
   argp.add_argument('--seek', '-s', type=int, default=0, help='number of bytes to skip at start of input (default: 0) (note: use -s8 with .gtirb files)')
-  argp.add_argument('--to', '-o', choices=['json', 'proto'], default='json', help='type of output to produce (default: json) (input must be the other type)')
+  g = argp.add_argument_group(title="input/output settings")
+  g = g.add_mutually_exclusive_group()
+  g.add_argument('--from', '-i', dest='fr', choices=['json', 'proto'], default=None, help='type of input (default: proto). if given, --to is set to the other type.')
+  g.add_argument('--to', '-o', choices=['json', 'proto'], default=None, help='type of output (default: json). if given, --from is set to the other type.')
+  g.add_argument('--idem', choices=['json', 'proto'], default=None, nargs='?', const='proto', help='instead of converting, perform an idempotent normalisation of the given file type (default: proto)')
   argp.add_argument('--proto', '-p', type=str, default=_gtirb, help='directory of .proto files (default: bundled GTIRB .proto files)')
   argp.add_argument('--msgtype', '-m', type=str, default=_gtirb_ir_type, help='protobuf message type (default: gtirb.proto.IR)')
   argp.add_argument('input', nargs='?', type=argparse.FileType('rb'), default=sys.stdin.buffer, help='input file path (default: stdin)')
-  argp.add_argument('output', nargs='?', type=argparse.FileType('wb'), default=sys.stdout.buffer, help='output file path (default: stdout)')
+  argp.add_argument('output', nargs='?', type=argparse.FileType('ab+'), default=sys.stdout.buffer, help='output file path (default: stdout)')
 
   args = argp.parse_args()
   debug(args)
+
+  def other(a: str):
+    if a == 'json': return 'proto'
+    if a == 'proto': return 'json'
+    assert False, f'{a} unsup'
+
+  if args.fr:
+    args.to = other(args.fr)
+  elif args.to:
+    args.fr = other(args.to)
+  elif args.idem:
+    args.fr = args.to = args.idem
+  else:
+    args.fr, args.to = 'proto', 'json'
 
   if args.proto == _gtirb:
     fdsetdata = zlib.decompress(base64.b64decode(GTIRB_FDSET))
@@ -99,16 +117,33 @@ def main():
   if not ProtoMessage:
     die(f"message type '{args.msgtype}' not found.")
 
-  args.input.read(args.seek)
-  if args.to == 'json':
+  prefix = args.input.read(args.seek)
+  data = args.input.read()
+  args.input.close()
+  message = None
+  if args.fr == 'proto':
     try:
-      message = ProtoMessage().FromString(args.input.read())
+      message = ProtoMessage().FromString(data)
     except Exception as e:
       if (args.proto, args.msgtype, args.seek) == (_gtirb, _gtirb_ir_type, 0):
         hint = 'failed to decode gtirb.  NOTE: .gtirb files have a magic prefix and need --seek 8 to decode properly.'
         if args.proto == _gtirb and args.seek == 0: raise UserWarning(hint) from e
       raise
+  elif args.fr == 'json':
+    message = ProtoMessage()
+    message = google.protobuf.json_format.Parse(data, message)
 
+  assert message
+  if args.output.fileno() not in (0, 1):  # not stdin or stdout
+    args.output.truncate(0)
+
+  if args.idem:
+    args.output.write(prefix)
+
+  if args.to == 'proto':
+    data = message.SerializeToString(deterministic=True)
+    args.output.write(data)
+  elif args.to == 'json':
     # see: https://github.com/protocolbuffers/protobuf/blob/main/python/google/protobuf/json_format.py
     # and: https://protobuf.dev/programming-guides/proto3/#json
     msgdict = google.protobuf.json_format.MessageToDict(
@@ -117,14 +152,9 @@ def main():
       preserving_proto_field_name=True
     )
 
-    data = json.dumps(msgdict, sort_keys=True)
+    data = json.dumps(msgdict, sort_keys=True, indent=0)
     args.output.write(data.encode('utf-8'))
-  else:
-    message = ProtoMessage()
-    message = google.protobuf.json_format.Parse(args.input.read(), message)
 
-    data = message.SerializeToString(deterministic=True)
-    args.output.write(data)
 
 if __name__ == '__main__':
   main()
