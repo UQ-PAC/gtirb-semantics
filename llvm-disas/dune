@@ -2,11 +2,12 @@
 (library
  (name llvm_disas)
  
- (libraries ctypes ctypes-foreign)
- (flags     :standard -cclib (:include llvmconf.sexp))
- )
+ (libraries ctypes ctypes.foreign)
+ (library_flags :standard -cclib (:include llvmconf.sexp))
+)
 
 (rule 
-  (targets llvmconf.sexp)
- (action (bash "$(opam var conf-llvm:config) --libs >> llvmconf.sexp"))
-  )
+ (targets llvmconf.sexp)
+ (action (bash "$(opam var conf-llvm:config) --libs > llvmconf.sexp"))
+)
+
