@@ -64,10 +64,6 @@ let usage_string  = "GTIRB_FILE OUTPUT_FILE"
 let ast           = "ast"
 (*let text          = ".text"*)
 
-(* JSON parsing/building  *)
-let hex           = "0x"
-
-
 (*  MAIN  *)
 let () = 
   (* Convenience *)
@@ -192,29 +188,38 @@ let () =
     | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
   in
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (op: bytes) (addr : int) : instruction_semantics =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
-    let p_pretty a = Asl_utils.pp_stmt a |> String.trim in
-    let address = Some (string_of_int addr)                                    in
-    let str op    = hex ^ Hexstring.encode op                                    in
-    let rev (b: bytes) : bytes = Bytes.mapi (fun i _ -> (Bytes.get b ((Bytes.length b - 1) - i))) b 
-    in 
-    let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
+  let to_asli (opcode_be: bytes) (addr : int) : instruction_semantics =
+    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
+    let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
+    let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
+    let address = Some (string_of_int addr)                                      in
+
+    (* below, opnum is the numeric opcode (necessarily BE) and opcode_* are always LE. *)
+    (* TODO: change argument of to_asli to follow this convention. *)
+    let opnum = Int32.to_int Bytes.(get_int32_be opcode_be 0)                    in
+    let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
+
+    let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
+    let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
+    let opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
     let do_dis () =
-      (match (Dis.retrieveDisassembly ?address env (Dis.build_env env) (str op)) with
+      (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
       | res -> (map p_raw res, map p_pretty res)
       | exception exc ->
         Printf.eprintf
           "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
-          (str op) str_bytes (Printexc.to_string exc);
+          opnum_str opcode_str (Printexc.to_string exc);
         Printexc.print_backtrace stderr;
         exit 1)
-    in let insns_raw, insns_pretty = tbl_update op (do_dis)
-  in
-    let opcode_le = String.concat " " (List.of_seq (Seq.map (fun f -> (Printf.sprintf "%02x" (Char.code f))) (Bytes.to_seq (rev op)))) in
-      {address = addr; opcode_be = (str op); opcode_le = opcode_le; readable = assembly_of_bytes_opt (rev op);
+    in
+    let insns_raw, insns_pretty = tbl_update opcode_be (do_dis) in
+    {
+      address = addr;
+      opcode_be = opnum_str;
+      opcode_le = opcode_str;
+      readable = assembly_of_bytes_opt opcode;
       statementlist = insns_raw;
-      pretty_statementlist = insns_pretty
+      pretty_statementlist = insns_pretty;
     }
   in
   let rec asts opcodes addr =
@@ -245,7 +250,7 @@ let () =
       )
       in
   let serialisable: string list =
-      let to_list x = `List x  in
+    let to_list x = `List x in
     let jsoned (asts: instruction_semantics list )  : Yojson.Safe.t = map (fun s -> yojson_instsem s) asts |>  to_list in
     (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
     let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun (b: ast_block) -> (((Base64.encode_exn (Bytes.to_string  b.auuid)), 
@@ -260,8 +265,8 @@ let () =
         )
         )) 
       )) l)) with_asts) in
-      List.iter (fun f -> Yojson.Safe.pretty_to_channel stdout f) paired;
-      map (fun j -> Yojson.Safe.to_string j) paired
+      (* List.iter (fun f -> Yojson.Safe.pretty_to_channel stdout f) paired; *)
+      map (Yojson.Safe.to_string) paired
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
@@ -290,6 +295,6 @@ let () =
   (* Reserialise to disk *)
   let out = open_out_bin Sys.argv.(out_ind) in
   (
-    Printf.fprintf out "%s" encoded;
+    output_string out encoded;
     close_out out;
   )
