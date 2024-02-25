@@ -15,7 +15,6 @@ depends: [
   "Yojson"
   "asli"
   "ocaml-protoc-plugin"
-  "hexstring"
   "base64"
   "odoc" {with-doc}
 ]
