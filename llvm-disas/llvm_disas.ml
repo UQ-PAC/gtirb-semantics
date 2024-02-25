@@ -17,16 +17,14 @@ let () =
 let disassembler : unit ptr = 
   let triple = "aarch64-unknown-linux-gnu" in
   let dc : unit ptr = llvm_create_disasm triple null 0 null null in
-  if (dc == null) then (raise (Failure ("Error creating disassembler for " ^ triple))) 
-  else dc
+  if (dc == null) then 
+    failwith ("Error creating disassembler for " ^ triple);
+  dc
 
 let byte_list (i: int) : char list = 
-  (List.map Char.chr [
-    Int.logand i 0x000000ff;
-    Int.shift_right_logical (Int.logand i 0x0000ff00) 8;
-    Int.shift_right_logical (Int.logand i 0x00ff0000) 16;
-    Int.shift_right_logical (Int.logand i 0xff000000) 24;
-  ]) 
+  let b = Bytes.create 4 in
+  Bytes.set_int32_le b 0 (Int32.of_int i);
+  List.init 4 (Bytes.get b)
 
 let hexstring_to_opcode (s: string) = 
   byte_list (int_of_string s)
@@ -39,7 +37,7 @@ let assembly_of_bytelist (opcode : char list) : string =
   if (outb == 0) then raise (Failure "Error disassembling instruction.") else
   let takeWhile (p: 'a -> bool) (ar:('a list)) : 'a list = 
       let rec _take (c: 'a list) (a: 'a list) = match a with 
-        | h :: tl -> if (p h) then (_take (List.append c [h]) tl) else c
+        | h :: tl -> if (p h) then (_take (c @ [h]) tl) else c
         | _ -> c  
       in
       _take [] ar
