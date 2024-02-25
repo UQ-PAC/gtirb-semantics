@@ -50,10 +50,6 @@ let usage_string  = "GTIRB_FILE OUTPUT_FILE"
 let ast           = "ast"
 (*let text          = ".text"*)
 
-(* JSON parsing/building  *)
-let hex           = "0x"
-
-
 (*  MAIN  *)
 let () = 
   (* Convenience *)
@@ -173,21 +169,30 @@ let () =
   in
 
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (op: bytes) (addr : int) : string list =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
-    let address = Some (string_of_int addr)                                    in
-    let str     = hex ^ Hexstring.encode op                                    in
-    let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
+  let to_asli (opcode_be: bytes) (addr : int) : string list =
+    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
+    let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
+    let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
+    let address = Some (string_of_int addr)                                      in
+
+    (* below, opnum is the numeric opcode (necessarily BE) and opcode_* are always LE. *)
+    (* TODO: change argument of to_asli to follow this convention. *)
+    let opnum = Int32.to_int Bytes.(get_int32_be opcode_be 0)                    in
+    let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
+
+    let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
+    let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
+    let opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
     let do_dis () =
-      (match (Dis.retrieveDisassembly ?address env (Dis.build_env env) str) with
-      | res -> map (fun x -> p_raw x) res
+      (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
+      | res -> (map p_raw res, map p_pretty res)
       | exception exc ->
         Printf.eprintf
           "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
-          str str_bytes (Printexc.to_string exc);
+          opnum_str opcode_str (Printexc.to_string exc);
         Printexc.print_backtrace stderr;
         exit 1)
-    in tbl_update op do_dis
+    in tbl_update opcode_be (fun x -> fst @@ do_dis x)
   in
   let rec asts opcodes addr =
     match opcodes with
@@ -204,11 +209,12 @@ let () =
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
   let serialisable: string list =
-      let to_list x = `List x  in
+    let to_list x = `List x  in
     let jsoned (asts: string list list )  : Yojson.Safe.t = mapmap (fun s -> `String s) asts |> map to_list |> to_list in
     (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
     let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun b -> (((Base64.encode_exn (Bytes.to_string  b.auuid))), (jsoned b.asts))) l)) with_asts) in
-      map (fun j -> Yojson.Safe.to_string j) paired
+      (* List.iter (fun f -> Yojson.Safe.pretty_to_channel stdout f) paired; *)
+      map (Yojson.Safe.to_string) paired
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
@@ -236,6 +242,6 @@ let () =
   (* Reserialise to disk *)
   let out = open_out_bin Sys.argv.(out_ind) in
   (
-    Printf.fprintf out "%s" encoded;
+    output_string out encoded;
     close_out out;
   )
