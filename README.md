@@ -14,7 +14,6 @@ To build and run this you will need:
 * protoc
 * The following OPAM packages:
 	* ocaml-protoc-plugin
-	* hexstring
 	* base64
 
 To massively simplify this, simply run ```scripts/build-all.sh``` in your preferred install directory. This script assumes a completely fresh Ubuntu 20.04.5 installation. It is advised to run this script within a fresh VM but it should work on established installations. A complete installation can take several hours and will prompt for the sudo password at least once.

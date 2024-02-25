@@ -15,7 +15,6 @@ depends: [
   "yojson"
   "asli"
   "ocaml-protoc-plugin"
-  "hexstring"
   "base64"
   "ctypes"
   "ctypes-foreign"
