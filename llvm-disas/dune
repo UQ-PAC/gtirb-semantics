@@ -8,6 +8,7 @@
 
 (rule 
  (targets llvmconf.sexp)
- (action (bash "$(opam var conf-llvm:config) --libs > llvmconf.sexp"))
+ ; use opam if present otherwise fall back to $LLVM_CONFIG
+ (action (bash "if command -v opam; then llvm_config=$(opam var conf-llvm:config); fi ; ${llvm_config:-$LLVM_CONFIG} --libs > llvmconf.sexp"))
 )
 
