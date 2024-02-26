@@ -3,12 +3,23 @@
  (name llvm_disas)
  
  (libraries ctypes ctypes.foreign)
- (library_flags :standard -cclib (:include llvmconf.sexp))
+ (library_flags :standard (:include llvmconf.sexp))
 )
 
+; use opam's detected llvm if present, otherwise fall back to 'llvm-config'
+(rule
+ (target llvmconf.pth)
+ (action (with-stdout-to %{target}
+  (bash "if command -v opam &>/dev/null ; then opam var conf-llvm:config ; else command -v llvm-config ; fi"))))
+
+; https://dune.readthedocs.io/en/latest/reference/actions/index.html
 (rule 
- (targets llvmconf.sexp)
- ; use opam if present otherwise fall back to $LLVM_CONFIG
- (action (bash "if command -v opam; then llvm_config=$(opam var conf-llvm:config); fi ; ${llvm_config:-$LLVM_CONFIG} --libs > llvmconf.sexp"))
-)
+ (target llvmconf.sexp)
+ (action (with-stdout-to %{target}
+  (setenv conf "%{read:llvmconf.pth}"
+   (pipe-stdout
+    ; (bash "printf 'llvm-config: %q\n' $conf >&2")
+    (bash "printf -- '-cclib %s\n' $($conf --libs)")
+    (bash "cat ; printf -- '-ccopt %s\n' $($conf --ldflags) $($conf --cflags)")
+    (bash "echo '(' ; cat ; echo ')'"))))))
 

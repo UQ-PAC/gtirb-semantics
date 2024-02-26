@@ -3,6 +3,6 @@
  (name main)
  (modules main)
  (libraries gtirb_semantics base64 yojson asli.libASL llvm_disas)
- (flags     :standard -cclib (:include ../llvm-disas/llvmconf.sexp))
+ (flags     :standard (:include ../llvm-disas/llvmconf.sexp))
 )
 
