@@ -212,9 +212,9 @@ let () =
     let to_list x = `List x  in
     let jsoned (asts: string list list )  : Yojson.Safe.t = mapmap (fun s -> `String s) asts |> map to_list |> to_list in
     (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
-    let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun b -> (((Base64.encode_exn (Bytes.to_string  b.auuid))), (jsoned b.asts))) l)) with_asts) in
-      (* List.iter (fun f -> Yojson.Safe.pretty_to_channel stdout f) paired; *)
-      map (Yojson.Safe.to_string) paired
+    let paired: Yojson.Safe.t list = (map (fun l -> `Assoc (map (fun b -> (((Base64.encode_exn (Bytes.to_string  b.auuid))), (jsoned b.asts))) l)) with_asts) in
+    List.iter (fun f -> Yojson.Safe.pretty_to_channel stderr f) paired; 
+    map (Yojson.Safe.to_string) paired
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
