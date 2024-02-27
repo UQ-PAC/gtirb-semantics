@@ -265,7 +265,7 @@ let () =
         )
         )) 
       )) l)) with_asts) in
-      (* List.iter (fun f -> Yojson.Safe.pretty_to_channel stdout f) paired; *)
+      List.iter (fun f -> Yojson.Safe.pretty_to_channel stderr f) paired; 
       map (Yojson.Safe.to_string) paired
   in 
 
