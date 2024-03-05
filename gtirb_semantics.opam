@@ -19,6 +19,8 @@ depends: [
   "ctypes"
   "ctypes-foreign"
   "conf-llvm"
+  "decompress"
+  "bigstringaf"
   "odoc" {with-doc}
 ]
 build: [
