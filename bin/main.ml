@@ -36,14 +36,24 @@ type content_block = {
 }
 
 (* CONSTANTS  *)
-(* Argv       *)
-let binary_ind    = 1
-let out_ind       = 2
 let opcode_length = 4
+let json_file = ref ""
+let speclist = [
+  ("--json", Arg.Set_string json_file, "output json semantics to given file (default: none, use /dev/stderr for stderr)");
+]
+let rest_index = ref (-1)
+let in_file = ref "/nowhere/input"
+let out_file = ref "/nowhere/output"
+let handle_rest_arg arg =
+  rest_index := 1 + !rest_index;
+  match !rest_index with
+  | 0 -> in_file := arg
+  | 1 -> out_file := arg
+  | _ -> failwith "argc unexpected"
 
 
-let expected_argc = 3  (* including arg0 *)
-let usage_string  = "GTIRB_FILE OUTPUT_FILE"
+let usage_string  = "GTIRB_FILE OUTPUT_FILE [--json JSON_SEMANTICS_OUTPUT]"
+let usage_message = Printf.sprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string
 (* ASL specifications are from the bundled ARM semantics in libASL. *)
 
 (* Protobuf spelunking  *)
@@ -77,7 +87,7 @@ let do_module (m: Module.t): Module.t =
 
     let content_block (i: ByteInterval.t) (b: Block.t) =
       {block = b; raw = i.contents; address = i.address} in
-      
+
     flatten @@ map (fun i -> map (fun b -> content_block i b) i.blocks) intervals
   in
 
@@ -165,10 +175,14 @@ let do_module (m: Module.t): Module.t =
     | []      -> []
     | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length))
   in
-  let with_asts = map (fun b 
-    -> {
+  (* let map' f l =
+    if List.length blk_orded > 10000
+      then Parmap.parmap ~ncores:2 f Parmap.(L l)
+      else map f l in *)
+  let map' = map in
+  let with_asts = map' (fun b -> {
       auuid   = b.ruuid;
-      asts    = (asts b.opcodes b.address);
+      asts    = asts b.opcodes b.address;
     }) blk_orded
   in
 
@@ -185,6 +199,12 @@ let do_module (m: Module.t): Module.t =
           (fun (b: ast_block) -> (Base64.encode_exn (Bytes.to_string b.auuid)), jsoned b.asts)
           with_asts) in
     Yojson.Safe.pretty_to_channel stderr paired; 
+
+    if !json_file <> "" then begin
+      let f = open_out !json_file in
+      Yojson.Safe.pretty_to_channel f paired;
+      close_out f
+    end;
     Yojson.Safe.to_string paired
   in 
 
@@ -201,16 +221,12 @@ let do_module (m: Module.t): Module.t =
 (*  MAIN  *)
 let () = 
   (* BEGINNING *)
-  let usage () =
-    (Printf.eprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string) in
-  if (Array.mem "--help" Sys.argv) then
-    (usage (); exit 0);
-  if (Array.length Sys.argv != expected_argc) then
-    (usage (); raise (Invalid_argument "invalid command line arguments"));
+  Arg.parse speclist handle_rest_arg usage_message;
+  (* Printf.eprintf "gtirb-semantics: %s -> %s\n" !in_file !out_file; *)
 
   (* Read bytes from the file, skip first 8 *) 
   let bytes = 
-    let ic  = open_in_bin Sys.argv.(binary_ind)     in 
+    let ic  = open_in_bin !in_file              in 
     let len = in_channel_length ic              in
     let magic = really_input_string ic 8        in
     let res = really_input_string ic (len - 8)  in
@@ -238,6 +254,6 @@ let () =
   let encoded     = Writer.contents serial       in
 
   (* Reserialise to disk *)
-  let out = open_out_bin Sys.argv.(out_ind) in
+  let out = open_out_bin !out_file in
   output_string out encoded;
   close_out out;
