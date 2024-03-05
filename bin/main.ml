@@ -74,9 +74,11 @@ let do_module (m: Module.t): Module.t =
     let all_sects = m.sections in
     let all_texts = all_sects in
     let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
-    map (fun (i : ByteInterval.t)
-      -> map (fun b -> {block = b; raw = i.contents; address = i.address}) i.blocks) intervals
-      |> flatten
+
+    let content_block (i: ByteInterval.t) (b: Block.t) =
+      {block = b; raw = i.contents; address = i.address} in
+      
+    flatten @@ map (fun i -> map (fun b -> content_block i b) i.blocks) intervals
   in
 
   (* Resolve polymorphic block variants to isolate only useful info *)
@@ -90,7 +92,7 @@ let do_module (m: Module.t): Module.t =
       contents = b.raw;
       address  = b.address + b.block.offset}) ival_blks
     in 
-    (filter (fun b -> b.size > 0)) poly_blks in
+    filter (fun b -> b.size > 0) poly_blks in
   
   (* Section up byte interval contents to their respective blocks and take individual opcodes *)
   let op_cuts : rectified_block list  =
@@ -98,7 +100,7 @@ let do_module (m: Module.t): Module.t =
         {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
     let rec cut_ops contents =
       if Bytes.length contents <= opcode_length then [contents]
-      else ((b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length))
+      else (b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length)
     in
     map (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
   in
@@ -183,7 +185,7 @@ let do_module (m: Module.t): Module.t =
           (fun (b: ast_block) -> (Base64.encode_exn (Bytes.to_string b.auuid)), jsoned b.asts)
           with_asts) in
     Yojson.Safe.pretty_to_channel stderr paired; 
-    (Yojson.Safe.to_string) paired
+    Yojson.Safe.to_string paired
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
