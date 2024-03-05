@@ -50,107 +50,71 @@ let usage_string  = "GTIRB_FILE OUTPUT_FILE"
 let ast           = "ast"
 (*let text          = ".text"*)
 
-(*  MAIN  *)
-let () = 
-  (* Convenience *)
-  let mapmap f l = map (map f) l                      in
 
-  (* Record convenience *)
-  let rblock sz id = {
-    ruuid     = id;
-    contents  = empty;
-    opcodes   = [];
-    address   = 0;
-    offset    = 0;
-    size      = sz;
-  } in
+(* Convenience *)
+let _mapmap (f: 'a -> 'b) (l: 'a list list) = map (map f) l
+
+(* Record convenience *)
+let rblock sz id = {
+  ruuid     = id;
+  contents  = empty;
+  opcodes   = [];
+  address   = 0;
+  offset    = 0;
+  size      = sz;
+}
+
+(* Byte & array manipulation convenience functions *)
+let b_tl op n   = Bytes.sub op n (Bytes.length op - n)
+let b_hd op n   = Bytes.sub op 0 n
+
   
-  (* Byte & array manipulation convenience functions *)
-  let len         = Bytes.length                in
-  let b_tl op n   = Bytes.sub op n (len op - n) in
-  let b_hd op n   = Bytes.sub op 0 n            in
-
-  (* BEGINNING *)
-  let usage () =
-    (Printf.eprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string) in
-  if (Array.mem "--help" Sys.argv) then
-    (usage (); exit 0);
-  if (Array.length Sys.argv != expected_argc) then
-    (usage (); raise (Invalid_argument "invalid command line arguments"));
-
-  (* Read bytes from the file, skip first 8 *) 
-  let bytes = 
-    let ic  = open_in Sys.argv.(binary_ind)     in 
-    let len = in_channel_length ic              in
-    let magic = really_input_string ic 8        in
-    let res = really_input_string ic (len - 8)  in
-    (* check for gtirb magic otherwise assume is raw protobuf *)
-    let res = if (String.starts_with ~prefix:"GTIRB" magic) then res else magic ^ res in
-    close_in ic; 
-    res
-  in
-  (* Pull out interesting code bits *)
-  let gtirb = 
-    let raw = Reader.create bytes in
-    IR.from_proto raw
-  in
-  let ir =
-    match gtirb with
-    | Ok a    -> a
-    | Error e -> failwith (
-        Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
-      )
-  in
-  let modules     = ir.modules                in
-  let ival_blks : content_block list list  =
-    let all_sects = map (fun (m : Module.t) -> m.sections) modules                          in
-    let all_texts = all_sects                                          in
-    let intervals = mapmap (fun (s : Section.t) -> s.byte_intervals) all_texts |> map flatten in
-    mapmap (fun (i : ByteInterval.t)
+let do_module (m: Module.t): Module.t = 
+  let ival_blks : content_block list =
+    let all_sects = m.sections in
+    let all_texts = all_sects in
+    let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
+    map (fun (i : ByteInterval.t)
       -> map (fun b -> {block = b; raw = i.contents; address = i.address}) i.blocks) intervals
-      |> map flatten
+      |> flatten
   in
 
   (* Resolve polymorphic block variants to isolate only useful info *)
-  let codes_only : rectified_block list list = 
+  let codes_only : rectified_block list = 
     let rectify = function
       | `Code (c : CodeBlock.t) -> rblock c.size c.uuid
       | _                       -> rblock 0 empty
     in
-    let poly_blks   = mapmap (fun b -> {{{(rectify b.block.value)
-      with offset   = b.block.offset}
-      with contents = b.raw}
-      with address  = b.address + b.block.offset}) ival_blks
+    let poly_blks   = map (fun b -> {(rectify b.block.value)
+      with offset   = b.block.offset;
+      contents = b.raw;
+      address  = b.address + b.block.offset}) ival_blks
     in 
-    map (filter (fun b -> b.size > 0)) poly_blks in
+    (filter (fun b -> b.size > 0)) poly_blks in
   
   (* Section up byte interval contents to their respective blocks and take individual opcodes *)
-  let op_cuts : rectified_block list list  =
-    let trimmed = mapmap (fun b -> 
+  let op_cuts : rectified_block list  =
+    let trimmed = map (fun b -> 
         {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
     let rec cut_ops contents =
-      if len contents <= opcode_length then [contents]
+      if Bytes.length contents <= opcode_length then [contents]
       else ((b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length))
     in
-    mapmap (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
+    map (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
   in
 
+  let need_flip = m.byte_order = ByteOrder.LittleEndian in
+
   (* Convert every opcode to big endianness *)
-  let blk_orded : rectified_block list list =
-    let need_flip = map (fun (m : Module.t)
-        -> m.byte_order = ByteOrder.LittleEndian) modules in
-    let rec endian_reverse opcode: bytes = 
-      if len opcode = 1
-      then opcode
-      else cat (endian_reverse (b_tl opcode 1)) (b_hd opcode 1)                       in
+  let blk_orded : rectified_block list =
+    let endian_reverse (opcode: bytes): bytes = 
+      let len = Bytes.length opcode in
+      let getrev i = Bytes.get opcode (len - 1 - i) in
+      Bytes.(init len getrev) in
     let flip_opcodes block = {block with opcodes = map endian_reverse block.opcodes}  in
-    let pairs = combine need_flip op_cuts in
-    let fix_mod p =
-      match p with
-      | (true,  o)  -> map flip_opcodes o
-      | (false, o)  -> o
+    let fix_mod : rectified_block list -> rectified_block list = if need_flip then map flip_opcodes else Fun.id
     in
-    map fix_mod pairs
+    fix_mod op_cuts
   in
 
   (* hashtable for memoising disassembly results by opcode. *)
@@ -199,7 +163,7 @@ let () =
     | []      -> []
     | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length))
   in
-  let with_asts = mapmap (fun b 
+  let with_asts = map (fun b 
     -> {
       auuid   = b.ruuid;
       asts    = (asts b.opcodes b.address);
@@ -208,40 +172,70 @@ let () =
 
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
-  let serialisable: string list =
-    let to_list x = `List x  in
-    let jsoned (asts: string list list )  : Yojson.Safe.t = mapmap (fun s -> `String s) asts |> map to_list |> to_list in
-    (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
-    let paired: Yojson.Safe.t list = (map (fun l -> `Assoc (map (fun b -> (((Base64.encode_exn (Bytes.to_string  b.auuid))), (jsoned b.asts))) l)) with_asts) in
-    List.iter (fun f -> Yojson.Safe.pretty_to_channel stderr f) paired; 
-    map (Yojson.Safe.to_string) paired
+  let serialisable: string =
+    let to_list x = `List x in
+    let to_string x = `String x in
+    let jsoned (asts: string list list) : Yojson.Safe.t =
+      to_list @@ List.map (fun x -> to_list @@ List.map to_string x) asts in
+    let paired: Yojson.Safe.t =
+      `Assoc (
+        map
+          (fun (b: ast_block) -> (Base64.encode_exn (Bytes.to_string b.auuid)), jsoned b.asts)
+          with_asts) in
+    Yojson.Safe.pretty_to_channel stderr paired; 
+    (Yojson.Safe.to_string) paired
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
-  let encoded =
-    let orig_auxes    = map (fun (m : Module.t) -> m.aux_data) modules  in
-    (* Turn the translation map + compressed semantics into auxdata and slide it in with the rest *)
-    (*let convert (k: string list): bytes list = map Bytes.of_string k in *)
-    let ast_aux (j: string) : AuxData.t = ({type_name = ast; data = Bytes.of_string j} : AuxData.t)  in
-    let new_auxes   = map ast_aux (serialisable) |> map (fun a -> (ast, a)) in
-    let aux_joins   = combine orig_auxes new_auxes                        in
-    let full_auxes  = map (fun ((l : (string * AuxData.t option) list), (m, b))
-        -> let orig = filter (fun (s,_) -> s <> m) l in
-        (m, Option.some b) :: orig) aux_joins     in
-    let mod_joins   = combine modules full_auxes  in
-    let mod_fixed   = map (fun ((m : Module.t), a)
-        -> {m with aux_data = a}) mod_joins in
-    (* Save some space by deleting all sections except .text, not necessary *)
-    let text_only   = map (fun (m : Module.t)
-        -> {m with sections = m.sections}) mod_fixed in
-    let new_ir      = {ir with modules = text_only}                 in
-    let serial      = IR.to_proto new_ir in
-    Writer.contents serial
+  let orig_auxes   = m.aux_data in
+  (* Turn the translation map + compressed semantics into auxdata and slide it in with the rest *)
+  let ast_aux data = AuxData.make ?type_name:(Some ast) ?data:(Some (Bytes.of_string data)) () in
+  let new_aux      = ast_aux (serialisable) in
+  let full_auxes   = ("ast", Some new_aux) :: orig_auxes in
+  let mod_fixed    = {m with aux_data = full_auxes} in
+  mod_fixed
+
+
+(*  MAIN  *)
+let () = 
+  (* BEGINNING *)
+  let usage () =
+    (Printf.eprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string) in
+  if (Array.mem "--help" Sys.argv) then
+    (usage (); exit 0);
+  if (Array.length Sys.argv != expected_argc) then
+    (usage (); raise (Invalid_argument "invalid command line arguments"));
+
+  (* Read bytes from the file, skip first 8 *) 
+  let bytes = 
+    let ic  = open_in_bin Sys.argv.(binary_ind)     in 
+    let len = in_channel_length ic              in
+    let magic = really_input_string ic 8        in
+    let res = really_input_string ic (len - 8)  in
+    (* check for gtirb magic otherwise assume is raw protobuf *)
+    let res = if (String.starts_with ~prefix:"GTIRB" magic) then res else magic ^ res in
+    close_in ic; 
+    res
   in
+
+  (* Pull out interesting code bits *)
+  let gtirb = 
+    let raw = Reader.create bytes in
+    IR.from_proto raw in
+
+  let ir =
+    match gtirb with
+    | Ok a    -> a
+    | Error e -> failwith (
+        Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
+      ) in
+
+  let modules'    = map do_module ir.modules     in
+  let new_ir      = {ir with modules = modules'} in
+  let serial      = IR.to_proto new_ir           in
+  let encoded     = Writer.contents serial       in
 
   (* Reserialise to disk *)
   let out = open_out_bin Sys.argv.(out_ind) in
-  (
-    output_string out encoded;
-    close_out out;
-  )
+  output_string out encoded;
+  close_out out;
