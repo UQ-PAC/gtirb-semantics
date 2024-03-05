@@ -89,9 +89,11 @@ let do_module (m: Module.t): Module.t =
     let all_sects = m.sections in
     let all_texts = all_sects in
     let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
-    map (fun (i : ByteInterval.t)
-      -> map (fun b -> {block = b; raw = i.contents; address = i.address}) i.blocks) intervals
-      |> flatten
+
+    let content_block (i: ByteInterval.t) (b: Block.t) =
+      {block = b; raw = i.contents; address = i.address} in
+      
+    flatten @@ map (fun i -> map (fun b -> content_block i b) i.blocks) intervals
   in
 
   (* Resolve polymorphic block variants to isolate only useful info *)
@@ -105,7 +107,7 @@ let do_module (m: Module.t): Module.t =
       contents = b.raw;
       address  = b.address + b.block.offset}) ival_blks
     in 
-    (filter (fun b -> b.size > 0)) poly_blks in
+    filter (fun b -> b.size > 0) poly_blks in
   
   (* Section up byte interval contents to their respective blocks and take individual opcodes *)
   let op_cuts : rectified_block list  =
@@ -113,7 +115,7 @@ let do_module (m: Module.t): Module.t =
         {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
     let rec cut_ops contents =
       if Bytes.length contents <= opcode_length then [contents]
-      else ((b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length))
+      else (b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length)
     in
     map (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
   in
@@ -207,34 +209,36 @@ let do_module (m: Module.t): Module.t =
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
   let yojson_instsem (s: instruction_semantics) = 
-      `Assoc (List.append  (match s.readable with 
-        | Some x -> [("assembly", `String x)]
-        | None -> [])
+    let assembly_maybe = 
+      match s.readable with 
+      | Some x -> [("assembly", `String x)]
+      | None -> [] in
+    `Assoc 
+      (assembly_maybe @
         [ ("addr", `Int s.address);
           ("opcode_le", `String s.opcode_le); ("opcode_be", `String s.opcode_be);
           ("semantics", `List (List.map (fun s -> `String s) s.statementlist));
-          ("pretty_semantics", `List (List.map (fun s -> `String s) s.pretty_statementlist));
-        ]
-      )
-      in
+          ("pretty_semantics", `List (List.map (fun s -> `String s) s.pretty_statementlist)); ])
+  in
+
   let serialisable: string =
     let to_list x = `List x in
-    let jsoned (asts: instruction_semantics list )  : Yojson.Safe.t = map (fun s -> yojson_instsem s) asts |>  to_list in
-    (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
-    let paired: Yojson.Safe.t = ((fun l -> `Assoc (map (fun (b: ast_block) -> (((Base64.encode_exn (Bytes.to_string  b.auuid)), 
-        (`Assoc (List.append  (match b.label with 
-              | Some l -> [("label", `String l)]
-              | None -> []
-          )
-        [
-          ("addr", `Int b.address);
-          ("instructions", (jsoned b.asts))
-        ]
-        )
-        )) 
-      )) l)) with_asts) in
-      (fun f -> Yojson.Safe.pretty_to_channel stderr f) paired; 
-      (Yojson.Safe.to_string) paired
+    let jsoned (asts: instruction_semantics list ) : Yojson.Safe.t = map (yojson_instsem) asts |> to_list in
+
+    let make_entry (b: ast_block): string * Yojson.Safe.t = 
+      let label_maybe =
+        match b.label with 
+        | Some l -> [("label", `String l)]
+        | None -> [] in
+      (
+        Base64.encode_exn (Bytes.to_string b.auuid),
+        `Assoc (label_maybe @ [ ("addr", `Int b.address); ("instructions", (jsoned b.asts)) ])
+      )
+    in
+
+    let paired: Yojson.Safe.t = `Assoc (map make_entry with_asts) in
+    Yojson.Safe.pretty_to_channel stderr paired; 
+    Yojson.Safe.to_string paired
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
