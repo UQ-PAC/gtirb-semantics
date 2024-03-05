@@ -13,17 +13,6 @@ open Llvm_disas
 
 (* TYPES  *)
 
-(* These could probably be simplified *)
-(* OCaml representation of mid-evaluation code block  *)
-type rectified_block = {
-  ruuid     : bytes;
-  contents  : bytes;
-  opcodes   : bytes list;
-  address   : int;
-  offset    : int;
-  size      : int;
-}
-
 type instruction_semantics = {
   address: int;
   opcode_le: string;
@@ -33,14 +22,17 @@ type instruction_semantics = {
   pretty_statementlist: string list;
 }
 
+(** a representation of a basic block, parameterised with the information stored for each opcode. *)
 type 'a block = {
-  block   : Block.t;
-  code    : CodeBlock.t;
-  address : int; 
-  endian  : ByteOrder.t;
-  opcodes : 'a list;
+  uuid     : bytes;
+  uuid_b64 : string;
+  block    : Block.t;
+  code     : CodeBlock.t;
+  address  : int; 
+  endian   : ByteOrder.t;
+  opcodes  : 'a list;
 
-  label   : string option;
+  label    : string option;
   successors : string list;
 }
 
@@ -77,16 +69,6 @@ let ast           = "ast"
 (* Convenience *)
 let _mapmap (f: 'a -> 'b) (l: 'a list list) = map (map f) l
 
-(* Record convenience *)
-let rblock sz id = {
-  ruuid     = id;
-  contents  = empty;
-  opcodes   = [];
-  address   = 0;
-  offset    = 0;
-  size      = sz;
-}
-
 
 (* Byte & array manipulation convenience functions *)
 let b_tl op n   = Bytes.sub op n (Bytes.length op - n)
@@ -114,9 +96,10 @@ let asl_env = lazy (
   in env
 )
 
+(* MAIN FUNCTIONALITY *)
 
-(** Populates the block with semantics for each opcode. *)
-let do_block (b: bytes block) : instruction_semantics block =
+(** Populates a basic block block with semantics. *)
+let run_asli_for_block (b: bytes block) : instruction_semantics block =
 
   (* Evaluate each instruction one by one with a new environment for each *)
   let to_asli (opcode_be: bytes) (addr : int) : instruction_semantics =
@@ -160,6 +143,13 @@ let do_block (b: bytes block) : instruction_semantics block =
     (fun i op -> to_asli op (b.address + i * opcode_length)) b.opcodes in
   {b with opcodes = opcodes'}
 
+
+(** Adds debug-relevant information to each block, returning a new block list.
+    For example, successors and function names. *)
+let debug_info_for_blocks (m: Module.t) (blocks: bytes block list) : bytes block list = 
+  blocks
+
+(** Locates and extracts basic blocks from a Module. *)
 let locate_blocks (m: Module.t) : bytes block list =
   let symmap = Hashtbl.create (List.length m.symbols) in
   List.iter 
@@ -169,41 +159,49 @@ let locate_blocks (m: Module.t) : bytes block list =
       | _ -> ())
     m.symbols;
 
+
   let blocks : bytes block list =
     let all_sects = m.sections in
     let all_texts = all_sects in
     let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
 
-    let block (i: ByteInterval.t) (b: Block.t): bytes block option =
+    let make_block (i: ByteInterval.t) (b: Block.t): bytes block option =
       match b.value with
       | `Code (c : CodeBlock.t) -> 
         Some {
+          uuid = c.uuid;
+          uuid_b64 = Base64.encode_exn (Bytes.to_string c.uuid);
           block = b;
           code = c;
           address = i.address;
           endian = m.byte_order;
+
           opcodes = cut_opcodes @@ Bytes.sub i.contents b.offset c.size;
+
           label = Option.map (fun (s: Symbol.t) -> s.name) @@ Hashtbl.find_opt symmap c.uuid;
           successors = [];
         }
       | _ -> None in
-    flatten @@ map (fun i -> filter_map (fun b -> block i b) i.blocks) intervals
+    flatten @@ map (fun i -> filter_map (fun b -> make_block i b) i.blocks) intervals
   in
 
   (* Convert every opcode to big endianness *)
-  let flip_block b = 
+  let to_big_endian b = 
     if b.endian == ByteOrder.LittleEndian
       then { b with opcodes = map b_rev b.opcodes; endian = ByteOrder.BigEndian }
       else b in
-  let blocks = map flip_block blocks in
+  let blocks = map to_big_endian blocks in
 
-  blocks
+  (* sort by address to approximate a (intra-procedural) topological order. *)
+  List.sort (fun a b -> Int.compare a.address b.address) blocks
 
+
+(** Adds semantics information to a single Module, returning a new Module. *)
 let do_module (m: Module.t) : Module.t = 
 
   let blocks = locate_blocks m in
 
-  let blocks = map do_block blocks in
+  let blocks = map run_asli_for_block blocks in
 
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
@@ -230,7 +228,7 @@ let do_module (m: Module.t) : Module.t =
         | Some l -> [("label", `String l)]
         | None -> [] in
       (
-        Base64.encode_exn (Bytes.to_string b.code.uuid),
+        b.uuid_b64,
         `Assoc (label_maybe @ [ ("addr", `Int b.address); ("instructions", (jsoned b.opcodes)) ])
       )
     in
