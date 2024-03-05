@@ -7,12 +7,10 @@ open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
 open Gtirb_semantics.Symbol.Gtirb.Proto
 open LibASL
-open Bytes
 open List
 open Llvm_disas
 
 (* TYPES  *)
-
 type instruction_semantics = {
   address: int;
   opcode_le: string;
@@ -37,6 +35,42 @@ type 'a block = {
 }
 
 type ast_block = instruction_semantics block
+
+
+module UuidMap = struct 
+  include Map.Make(Bytes)
+
+  let of_list_fold (f: 'a -> (key * 'v) option) (list: 'a list) : 'v t = 
+    List.fold_left
+      (fun m x -> match f x with
+      | Some (k,v) -> add k v m
+      | _ -> m)
+      empty
+      list
+
+  let of_bindings = of_list_fold (fun a -> Some a)
+end
+
+module UuidSet = Set.Make(Bytes)
+
+type context = {
+  symmap_of_referent : bytes UuidMap.t;
+  symmap_of_symbol   : bytes UuidMap.t;
+
+  function_names     : string UuidMap.t;
+  function_entries   : UuidSet.t UuidMap.t;
+  function_blocks    : string UuidMap.t;
+}
+
+
+
+let make_map_from_list (f: 'a -> (bytes * 'v) option) (list: 'a list) : 'v UuidMap.t = 
+  List.fold_left
+    (fun m x -> match f x with
+    | Some (k,v) -> UuidMap.add k v m
+    | _ -> m)
+    UuidMap.empty
+    list
 
 (* CONSTANTS  *)
 let opcode_length = 4
@@ -88,7 +122,6 @@ let cut_opcodes (b: bytes): bytes list =
 
 (* ASLP initialisation (lazy, use with Lazy.force) *)
 let asl_env = lazy (
-  Printexc.record_backtrace true;
   let env =
     match Eval.aarch64_evaluation_environment () with
     | Some e -> e
@@ -147,10 +180,6 @@ let run_asli_for_block (b: bytes block) : instruction_semantics block =
 (** Adds debug-relevant information to each block, returning a new block list.
     For example, successors and function names. *)
 let debug_info_for_blocks (m: Module.t) (blocks: bytes block list) : bytes block list = 
-  blocks
-
-(** Locates and extracts basic blocks from a Module. *)
-let locate_blocks (m: Module.t) : bytes block list =
   let symmap = Hashtbl.create (List.length m.symbols) in
   List.iter 
     (fun (s: Symbol.t) -> 
@@ -159,6 +188,26 @@ let locate_blocks (m: Module.t) : bytes block list =
       | _ -> ())
     m.symbols;
 
+  let get_aux name = (Option.get @@ List.assoc name m.aux_data).data in
+  let x = Auxdata.decode_map_uuid_uuid @@ get_aux "functionNames" in
+  List.iter (fun (k, v) -> 
+    let a = Option.fold ~none:("none for " ^ Base64.encode_exn (Bytes.to_string v)) ~some:(fun (a : Symbol.t) -> a.name) @@ Hashtbl.find_opt symmap v in
+    Printf.printf "k: %s\n" a
+    ) x;
+  let _ = Auxdata.decode_map_uuid_uuid_set @@ get_aux "functionEntries" in
+  let _ = Auxdata.decode_map_uuid_uuid_set @@ get_aux "functionBlocks" in
+    blocks
+
+
+(** Locates and extracts basic blocks from a Module. *)
+let locate_blocks (m: Module.t) : bytes block list =
+  (* symbols keyed by referent, e.g. the uuid of the block the symbol refers to. *)
+  let symmap =
+    UuidMap.of_list_fold 
+      (fun (s: Symbol.t) -> match s.optional_payload with 
+       | `Referent_uuid b -> Some (b, s)
+       | _ -> None)
+      m.symbols in
 
   let blocks : bytes block list =
     let all_sects = m.sections in
@@ -178,7 +227,7 @@ let locate_blocks (m: Module.t) : bytes block list =
 
           opcodes = cut_opcodes @@ Bytes.sub i.contents b.offset c.size;
 
-          label = Option.map (fun (s: Symbol.t) -> s.name) @@ Hashtbl.find_opt symmap c.uuid;
+          label = Option.map (fun (s: Symbol.t) -> s.name) @@ UuidMap.find_opt c.uuid symmap;
           successors = [];
         }
       | _ -> None in
@@ -193,7 +242,11 @@ let locate_blocks (m: Module.t) : bytes block list =
   let blocks = map to_big_endian blocks in
 
   (* sort by address to approximate a (intra-procedural) topological order. *)
-  List.sort (fun a b -> Int.compare a.address b.address) blocks
+  let blocks = List.sort (fun a b -> Int.compare a.address b.address) blocks in
+
+  let blocks = debug_info_for_blocks m blocks in
+
+  blocks
 
 
 (** Adds semantics information to a single Module, returning a new Module. *)
@@ -261,6 +314,7 @@ let () =
   Arg.parse speclist handle_rest_arg usage_message;
   (* Printf.eprintf "gtirb-semantics: %s -> %s\n" !in_file !out_file; *)
 
+  Printexc.record_backtrace true;
   (* Read bytes from the file, skip first 8 *) 
   let bytes = 
     let ic  = open_in_bin !in_file              in 
