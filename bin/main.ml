@@ -33,21 +33,18 @@ type instruction_semantics = {
   pretty_statementlist: string list;
 }
 
-(* ASLi semantic info for a block *)
-type ast_block = {
-  auuid   : bytes;
-  label: string option;
-  address : int;
-  asts    : instruction_semantics list;
-}
-
-
-(* Wrapper for polymorphic code/data/not-set block pre-rectification  *)
-type content_block = {
+type 'a block = {
   block   : Block.t;
-  raw     : bytes;
+  code    : CodeBlock.t;
   address : int; 
+  endian  : ByteOrder.t;
+  opcodes : 'a list;
+
+  label   : string option;
+  successors : string list;
 }
+
+type ast_block = instruction_semantics block
 
 (* CONSTANTS  *)
 let opcode_length = 4
@@ -58,17 +55,19 @@ let speclist = [
 let rest_index = ref (-1)
 let in_file = ref "/nowhere/input"
 let out_file = ref "/nowhere/output"
+
+let usage_string  = "GTIRB_FILE OUTPUT_FILE [--json JSON_SEMANTICS_OUTPUT]"
+let usage_message = Printf.sprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string
+(* ASL specifications are from the bundled ARM semantics in libASL. *)
+
 let handle_rest_arg arg =
   rest_index := 1 + !rest_index;
   match !rest_index with
   | 0 -> in_file := arg
   | 1 -> out_file := arg
-  | _ -> failwith "argc unexpected"
+  | _ -> output_string stderr usage_message; exit 1
 
 
-let usage_string  = "GTIRB_FILE OUTPUT_FILE [--json JSON_SEMANTICS_OUTPUT]"
-let usage_message = Printf.sprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string
-(* ASL specifications are from the bundled ARM semantics in libASL. *)
 
 (* Protobuf spelunking  *)
 let ast           = "ast"
@@ -88,76 +87,36 @@ let rblock sz id = {
   size      = sz;
 }
 
+
 (* Byte & array manipulation convenience functions *)
 let b_tl op n   = Bytes.sub op n (Bytes.length op - n)
 let b_hd op n   = Bytes.sub op 0 n
+let b_rev (opcode: bytes): bytes = 
+  let len = Bytes.length opcode in
+  let getrev i = Bytes.get opcode (len - 1 - i) in
+  Bytes.(init len getrev)
+
+let cut_opcodes (b: bytes): bytes list =
+  let len = Bytes.length b in
+  let count = len / opcode_length in
+  assert (0 == len mod opcode_length);
+  List.init count
+    (fun i -> Bytes.sub b (i * opcode_length) opcode_length)
 
 
-let do_module (m: Module.t): Module.t = 
-
-  let ival_blks : content_block list =
-    let all_sects = m.sections in
-    let all_texts = all_sects in
-    let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
-
-    let content_block (i: ByteInterval.t) (b: Block.t) =
-      {block = b; raw = i.contents; address = i.address} in
-
-    flatten @@ map (fun i -> map (fun b -> content_block i b) i.blocks) intervals
-  in
-
-  (* Resolve polymorphic block variants to isolate only useful info *)
-  let codes_only : rectified_block list = 
-    let rectify = function
-      | `Code (c : CodeBlock.t) -> rblock c.size c.uuid
-      | _                       -> rblock 0 empty
-    in
-    let poly_blks   = map (fun b -> {(rectify b.block.value)
-      with offset   = b.block.offset;
-      contents = b.raw;
-      address  = b.address + b.block.offset}) ival_blks
-    in 
-    filter (fun b -> b.size > 0) poly_blks in
-  
-  (* Section up byte interval contents to their respective blocks and take individual opcodes *)
-  let op_cuts : rectified_block list  =
-    let trimmed = map (fun b -> 
-        {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
-    let rec cut_ops contents =
-      if Bytes.length contents <= opcode_length then [contents]
-      else (b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length)
-    in
-    map (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
-  in
-
-  let symmap = Hashtbl.create (List.length m.symbols) in
-  List.iter 
-    (fun (s: Symbol.t) -> 
-      match s.optional_payload with 
-      | `Referent_uuid b -> Hashtbl.add symmap b s
-      | _ -> ())
-    m.symbols;
-
-  let need_flip = m.byte_order = ByteOrder.LittleEndian in
-
-  (* Convert every opcode to big endianness *)
-  let blk_orded : rectified_block list =
-    let endian_reverse (opcode: bytes): bytes = 
-      let len = Bytes.length opcode in
-      let getrev i = Bytes.get opcode (len - 1 - i) in
-      Bytes.(init len getrev) in
-    let flip_opcodes block = {block with opcodes = map endian_reverse block.opcodes}  in
-    let fix_mod : rectified_block list -> rectified_block list = if need_flip then map flip_opcodes else Fun.id
-    in
-    fix_mod op_cuts
-  in
-
+(* ASLP initialisation (lazy, use with Lazy.force) *)
+let asl_env = lazy (
   Printexc.record_backtrace true;
   let env =
     match Eval.aarch64_evaluation_environment () with
     | Some e -> e
     | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
-  in
+  in env
+)
+
+
+(** Populates the block with semantics for each opcode. *)
+let do_block (b: bytes block) : instruction_semantics block =
 
   (* Evaluate each instruction one by one with a new environment for each *)
   let to_asli (opcode_be: bytes) (addr : int) : instruction_semantics =
@@ -174,7 +133,9 @@ let do_module (m: Module.t): Module.t =
     let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
     let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
     let opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
+
     let do_dis () =
+      let env = Lazy.force asl_env in
       (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
       | res -> (map p_raw res, map p_pretty res)
       | exception exc ->
@@ -194,23 +155,55 @@ let do_module (m: Module.t): Module.t =
       pretty_statementlist = insns_pretty;
     }
   in
-  let rec asts opcodes addr =
-    match opcodes with
-    | []      -> []
-    | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length))
+
+  let opcodes' = mapi
+    (fun i op -> to_asli op (b.address + i * opcode_length)) b.opcodes in
+  {b with opcodes = opcodes'}
+
+let locate_blocks (m: Module.t) : bytes block list =
+  let symmap = Hashtbl.create (List.length m.symbols) in
+  List.iter 
+    (fun (s: Symbol.t) -> 
+      match s.optional_payload with 
+      | `Referent_uuid b -> Hashtbl.add symmap b s
+      | _ -> ())
+    m.symbols;
+
+  let blocks : bytes block list =
+    let all_sects = m.sections in
+    let all_texts = all_sects in
+    let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
+
+    let block (i: ByteInterval.t) (b: Block.t): bytes block option =
+      match b.value with
+      | `Code (c : CodeBlock.t) -> 
+        Some {
+          block = b;
+          code = c;
+          address = i.address;
+          endian = m.byte_order;
+          opcodes = cut_opcodes @@ Bytes.sub i.contents b.offset c.size;
+          label = Option.map (fun (s: Symbol.t) -> s.name) @@ Hashtbl.find_opt symmap c.uuid;
+          successors = [];
+        }
+      | _ -> None in
+    flatten @@ map (fun i -> filter_map (fun b -> block i b) i.blocks) intervals
   in
-  (* let map' f l =
-    if List.length blk_orded > 10000
-      then Parmap.parmap ~ncores:2 f Parmap.(L l)
-      else map f l in *)
-  let map' = map in
-  let with_asts = map' (fun b -> {
-      auuid   = b.ruuid;
-      address = b.address;
-      asts    = asts b.opcodes b.address;
-      label   = Option.map (fun (s: Symbol.t) -> s.name) (Hashtbl.find_opt symmap b.ruuid)
-    }) blk_orded
-  in
+
+  (* Convert every opcode to big endianness *)
+  let flip_block b = 
+    if b.endian == ByteOrder.LittleEndian
+      then { b with opcodes = map b_rev b.opcodes; endian = ByteOrder.BigEndian }
+      else b in
+  let blocks = map flip_block blocks in
+
+  blocks
+
+let do_module (m: Module.t) : Module.t = 
+
+  let blocks = locate_blocks m in
+
+  let blocks = map do_block blocks in
 
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
@@ -237,12 +230,12 @@ let do_module (m: Module.t): Module.t =
         | Some l -> [("label", `String l)]
         | None -> [] in
       (
-        Base64.encode_exn (Bytes.to_string b.auuid),
-        `Assoc (label_maybe @ [ ("addr", `Int b.address); ("instructions", (jsoned b.asts)) ])
+        Base64.encode_exn (Bytes.to_string b.code.uuid),
+        `Assoc (label_maybe @ [ ("addr", `Int b.address); ("instructions", (jsoned b.opcodes)) ])
       )
     in
 
-    let paired: Yojson.Safe.t = `Assoc (map make_entry with_asts) in
+    let paired: Yojson.Safe.t = `Assoc (map make_entry blocks) in
     let json_str = Yojson.Safe.pretty_to_string paired in
     if !json_file != "" then begin
       let f = open_out !json_file in
@@ -260,6 +253,7 @@ let do_module (m: Module.t): Module.t =
   let new_aux      = ast_aux (Compress.deflate_string serialisable) in
   let full_auxes   = ("ast", Some new_aux) :: orig_auxes in
   let mod_fixed    = {m with aux_data = full_auxes} in
+
   mod_fixed
 
 
