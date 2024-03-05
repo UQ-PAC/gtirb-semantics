@@ -129,14 +129,6 @@ let do_module (m: Module.t): Module.t =
     fix_mod op_cuts
   in
 
-  (* hashtable for memoising disassembly results by opcode. *)
-  let tbl : (bytes, string list) Hashtbl.t = Hashtbl.create 10000 in
-  let tbl_update k f =
-    match Hashtbl.find_opt tbl k with
-    | Some x -> x
-    | None -> let x = f () in (Hashtbl.replace tbl k x; x)
-  in
-
   Printexc.record_backtrace true;
   let env =
     match Eval.aarch64_evaluation_environment () with
@@ -168,7 +160,7 @@ let do_module (m: Module.t): Module.t =
           opnum_str opcode_str (Printexc.to_string exc);
         Printexc.print_backtrace stderr;
         exit 1)
-    in tbl_update opcode_be (fun x -> fst @@ do_dis x)
+    in fst @@ do_dis ()
   in
   let rec asts opcodes addr =
     match opcodes with
