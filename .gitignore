@@ -51,3 +51,5 @@ extras/example-bin/example.gts
 extras/example-bin/example.ast
 extras/example-bin/example.ast.json.t
 extras/example-bin/example.ast.json
+
+.venv
