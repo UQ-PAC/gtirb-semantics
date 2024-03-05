@@ -265,12 +265,13 @@ let do_module (m: Module.t): Module.t =
     in
 
     let paired: Yojson.Safe.t = `Assoc (map make_entry with_asts) in
+    let json_str = Yojson.Safe.pretty_to_string paired in
     if !json_file != "" then begin
       let f = open_out !json_file in
-      Yojson.Safe.pretty_to_channel f paired;
+      output_string f json_str;
       close_out f
     end;
-    Yojson.Safe.to_string paired
+    json_str
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
