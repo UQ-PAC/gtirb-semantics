@@ -21,6 +21,7 @@ depends: [
   "conf-llvm"
   "decompress"
   "bigstringaf"
+  "containers"
   "odoc" {with-doc}
 ]
 build: [

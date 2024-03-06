@@ -6,9 +6,13 @@ open Gtirb_semantics.Section.Gtirb.Proto
 open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
 open Gtirb_semantics.Symbol.Gtirb.Proto
-open LibASL
-open List
-open Llvm_disas
+
+open struct
+  let (%) = CCFun.Infix.(%)
+  let (%>) = CCFun.Infix.(%>)
+end
+
+open Decoder
 
 (* TYPES  *)
 type instruction_semantics = {
@@ -22,8 +26,7 @@ type instruction_semantics = {
 
 (** a representation of a basic block, parameterised with the information stored for each opcode. *)
 type 'a block = {
-  uuid     : bytes;
-  uuid_b64 : string;
+  uuid     : Uuid.t;
   block    : Block.t;
   code     : CodeBlock.t;
   address  : int; 
@@ -36,41 +39,24 @@ type 'a block = {
 
 type ast_block = instruction_semantics block
 
+module StringMap = CCMap.Make(String)
 
-module UuidMap = struct 
-  include Map.Make(Bytes)
-
-  let of_list_fold (f: 'a -> (key * 'v) option) (list: 'a list) : 'v t = 
-    List.fold_left
-      (fun m x -> match f x with
-      | Some (k,v) -> add k v m
-      | _ -> m)
-      empty
-      list
-
-  let of_bindings = of_list_fold (fun a -> Some a)
-end
-
-module UuidSet = Set.Make(Bytes)
 
 type context = {
-  symmap_of_referent : bytes UuidMap.t;
-  symmap_of_symbol   : bytes UuidMap.t;
+  (* symbols keyed by referent, e.g. the uuid of the block the symbol refers to. *)
+  symmap_of_referent : Symbol.t UuidMap.t;
+  (* symbols keyed by the uuid of the symbol. *)
+  symmap   : Symbol.t UuidMap.t;
 
+  (* auxdata keyed by function uuid. *)
   function_names     : string UuidMap.t;
   function_entries   : UuidSet.t UuidMap.t;
-  function_blocks    : string UuidMap.t;
+  function_blocks    : UuidSet.t UuidMap.t;
+
+  (* block to function map, keyed by block uuid. *)
+  function_of_block  : Uuid.t UuidMap.t;
 }
 
-
-
-let make_map_from_list (f: 'a -> (bytes * 'v) option) (list: 'a list) : 'v UuidMap.t = 
-  List.fold_left
-    (fun m x -> match f x with
-    | Some (k,v) -> UuidMap.add k v m
-    | _ -> m)
-    UuidMap.empty
-    list
 
 (* CONSTANTS  *)
 let opcode_length = 4
@@ -101,7 +87,10 @@ let ast           = "ast"
 
 
 (* Convenience *)
-let _mapmap (f: 'a -> 'b) (l: 'a list list) = map (map f) l
+let _mapmap (f: 'a -> 'b) (l: 'a list list) = List.map (List.map f) l
+
+let pp_base64 p = Format.pp_print_string p % Uuid.to_base64
+let pp_block p = pp_base64 p % fun b -> b.uuid
 
 
 (* Byte & array manipulation convenience functions *)
@@ -123,7 +112,7 @@ let cut_opcodes (b: bytes): bytes list =
 (* ASLP initialisation (lazy, use with Lazy.force) *)
 let asl_env = lazy (
   let env =
-    match Eval.aarch64_evaluation_environment () with
+    match LibASL.Eval.aarch64_evaluation_environment () with
     | Some e -> e
     | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
   in env
@@ -136,8 +125,8 @@ let run_asli_for_block (b: bytes block) : instruction_semantics block =
 
   (* Evaluate each instruction one by one with a new environment for each *)
   let to_asli (opcode_be: bytes) (addr : int) : instruction_semantics =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
-    let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
+    let p_raw a = LibASL.Utils.to_string (LibASL.Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
+    let p_pretty a = LibASL.Asl_utils.pp_stmt a |> String.trim                          in
     let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
     let address = Some (string_of_int addr)                                      in
 
@@ -152,8 +141,9 @@ let run_asli_for_block (b: bytes block) : instruction_semantics block =
 
     let do_dis () =
       let env = Lazy.force asl_env in
-      (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
-      | res -> (map p_raw res, map p_pretty res)
+      let denv = LibASL.Dis.build_env env in
+      (match LibASL.Dis.retrieveDisassembly ?address env denv opnum_str with
+      | res -> (List.map p_raw res, List.map p_pretty res)
       | exception exc ->
         Printf.eprintf
           "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
@@ -166,13 +156,13 @@ let run_asli_for_block (b: bytes block) : instruction_semantics block =
       address = addr;
       opcode_be = opnum_str;
       opcode_le = opcode_str;
-      readable = assembly_of_bytes_opt opcode;
+      readable = Llvm_disas.assembly_of_bytes_opt opcode;
       statementlist = insns_raw;
       pretty_statementlist = insns_pretty;
     }
   in
 
-  let opcodes' = mapi
+  let opcodes' = List.mapi
     (fun i op -> to_asli op (b.address + i * opcode_length)) b.opcodes in
   {b with opcodes = opcodes'}
 
@@ -189,37 +179,31 @@ let debug_info_for_blocks (m: Module.t) (blocks: bytes block list) : bytes block
     m.symbols;
 
   let get_aux name = (Option.get @@ List.assoc name m.aux_data).data in
-  let x = Auxdata.decode_map_uuid_uuid @@ get_aux "functionNames" in
+  let x = decode_map_uuid_uuid @@ get_aux "functionNames" in
+  (* let a = UuidMap.of_list x in
+  let a2 = UuidMap.map (fun v -> )
   List.iter (fun (k, v) -> 
     let a = Option.fold ~none:("none for " ^ Base64.encode_exn (Bytes.to_string v)) ~some:(fun (a : Symbol.t) -> a.name) @@ Hashtbl.find_opt symmap v in
     Printf.printf "k: %s\n" a
-    ) x;
-  let _ = Auxdata.decode_map_uuid_uuid_set @@ get_aux "functionEntries" in
-  let _ = Auxdata.decode_map_uuid_uuid_set @@ get_aux "functionBlocks" in
+    ) x; *)
+  let _ = decode_map_uuid_uuid_set @@ get_aux "functionEntries" in
+  let _ = decode_map_uuid_uuid_set @@ get_aux "functionBlocks" in
     blocks
 
 
-(** Locates and extracts basic blocks from a Module. *)
-let locate_blocks (m: Module.t) : bytes block list =
-  (* symbols keyed by referent, e.g. the uuid of the block the symbol refers to. *)
-  let symmap =
-    UuidMap.of_list_fold 
-      (fun (s: Symbol.t) -> match s.optional_payload with 
-       | `Referent_uuid b -> Some (b, s)
-       | _ -> None)
-      m.symbols in
-
+(** Locates basic blocks from a Module and extracts their opcodes. *)
+let locate_blocks (context: context) (m: Module.t) : bytes block list =
   let blocks : bytes block list =
     let all_sects = m.sections in
     let all_texts = all_sects in
-    let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
+    let intervals = List.map (fun (s : Section.t) -> s.byte_intervals) all_texts |> List.flatten in
 
     let make_block (i: ByteInterval.t) (b: Block.t): bytes block option =
       match b.value with
       | `Code (c : CodeBlock.t) -> 
+        let uuid = Uuid.of_bytes c.uuid in
         Some {
-          uuid = c.uuid;
-          uuid_b64 = Base64.encode_exn (Bytes.to_string c.uuid);
+          uuid;
           block = b;
           code = c;
           address = i.address;
@@ -227,19 +211,19 @@ let locate_blocks (m: Module.t) : bytes block list =
 
           opcodes = cut_opcodes @@ Bytes.sub i.contents b.offset c.size;
 
-          label = Option.map (fun (s: Symbol.t) -> s.name) @@ UuidMap.find_opt c.uuid symmap;
+          label = Option.map (fun (s: Symbol.t) -> s.name) @@ UuidMap.find_opt uuid context.symmap_of_referent;
           successors = [];
         }
       | _ -> None in
-    flatten @@ map (fun i -> filter_map (fun b -> make_block i b) i.blocks) intervals
+    List.flatten @@ List.map (fun i -> List.filter_map (fun b -> make_block i b) i.blocks) intervals
   in
 
   (* Convert every opcode to big endianness *)
   let to_big_endian b = 
     if b.endian == ByteOrder.LittleEndian
-      then { b with opcodes = map b_rev b.opcodes; endian = ByteOrder.BigEndian }
+      then { b with opcodes = List.map b_rev b.opcodes; endian = ByteOrder.BigEndian }
       else b in
-  let blocks = map to_big_endian blocks in
+  let blocks = List.map to_big_endian blocks in
 
   (* sort by address to approximate a (intra-procedural) topological order. *)
   let blocks = List.sort (fun a b -> Int.compare a.address b.address) blocks in
@@ -248,13 +232,59 @@ let locate_blocks (m: Module.t) : bytes block list =
 
   blocks
 
+let build_module_context (m: Module.t) : context =
+  let symmap_of_referent =
+    UuidMap.of_list @@ List.filter_map
+      (fun (s: Symbol.t) -> match s.optional_payload with 
+       | `Referent_uuid b -> Some (Uuid.of_bytes b, s)
+       | _ -> None)
+      m.symbols in
+
+  let symmap =
+    UuidMap.of_list @@ List.map
+      (fun (s: Symbol.t) -> (Uuid.of_bytes s.uuid, s))
+      m.symbols in
+
+  let auxdata = 
+    m.aux_data 
+    |> StringMap.of_list
+    |> StringMap.filter_map Fun.(const id)
+    |> StringMap.map (fun (x : AuxData.t) -> x.data) in
+
+  let get_aux s = StringMap.get s auxdata in
+  let get_or_empty f name = Option.fold ~none:UuidMap.empty ~some:f @@ get_aux name in
+
+  let function_names =
+    get_or_empty decode_map_uuid_uuid "functionNames"
+    |> UuidMap.filter_map (fun _k v -> UuidMap.find_opt v symmap)
+    |> UuidMap.map (fun (s: Symbol.t) -> s.name) in
+
+  let function_entries = get_or_empty decode_map_uuid_uuid_set "functionEntries" in
+  let function_blocks = get_or_empty decode_map_uuid_uuid_set "functionBlocks" in
+
+  let function_of_block =
+    function_blocks
+    |> UuidMap.map UuidSet.to_list
+    |> UuidMap.to_list
+    |> CCList.concat_map (fun (f,bs) -> List.map (fun b -> (b,f)) bs)
+    |> UuidMap.of_list in
+
+  UuidMap.pp (CCFormat.within "[" "]" Uuid.pp) (CCFormat.hbox @@ UuidSet.pp Uuid.pp) Format.err_formatter function_entries;
+  Format.pp_force_newline Format.err_formatter ();
+  Format.pp_force_newline Format.err_formatter ();
+  UuidMap.pp (CCFormat.within "[" "]" Uuid.pp) (CCFormat.hbox @@ UuidSet.pp Uuid.pp) Format.err_formatter function_blocks;
+
+  { symmap_of_referent; symmap; function_names; function_entries; function_blocks; function_of_block; }
+
 
 (** Adds semantics information to a single Module, returning a new Module. *)
 let do_module (m: Module.t) : Module.t = 
 
-  let blocks = locate_blocks m in
+  let context = build_module_context m in
 
-  let blocks = map run_asli_for_block blocks in
+  let blocks = locate_blocks context m in
+
+  let blocks = List.map run_asli_for_block blocks in
 
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
@@ -273,7 +303,7 @@ let do_module (m: Module.t) : Module.t =
 
   let serialisable: string =
     let to_list x = `List x in
-    let jsoned (asts: instruction_semantics list ) : Yojson.Safe.t = map (yojson_instsem) asts |> to_list in
+    let jsoned (asts: instruction_semantics list ) : Yojson.Safe.t = List.map (yojson_instsem) asts |> to_list in
 
     let make_entry (b: ast_block): string * Yojson.Safe.t = 
       let label_maybe =
@@ -281,12 +311,12 @@ let do_module (m: Module.t) : Module.t =
         | Some l -> [("label", `String l)]
         | None -> [] in
       (
-        b.uuid_b64,
+        Uuid.to_base64 b.uuid,
         `Assoc (label_maybe @ [ ("addr", `Int b.address); ("instructions", (jsoned b.opcodes)) ])
       )
     in
 
-    let paired: Yojson.Safe.t = `Assoc (map make_entry blocks) in
+    let paired: Yojson.Safe.t = `Assoc (List.map make_entry blocks) in
     let json_str = Yojson.Safe.pretty_to_string paired in
     if !json_file != "" then begin
       let f = open_out !json_file in
@@ -299,7 +329,7 @@ let do_module (m: Module.t) : Module.t =
   (* Sandwich ASTs into the IR amongst the other auxdata *)
   let orig_auxes   = m.aux_data in
   (* Turn the translation map + compressed semantics into auxdata and slide it in with the rest *)
-  (*let convert (k: string list): bytes list = map Bytes.of_string k in *)
+  (*let convert (k: string list): bytes list = List.map Bytes.of_string k in *)
   let ast_aux data = AuxData.make ?type_name:(Some ast) ?data:(Some (Bytes.of_string data)) () in
   let new_aux      = ast_aux (Compress.deflate_string serialisable) in
   let full_auxes   = ("ast", Some new_aux) :: orig_auxes in
@@ -337,7 +367,7 @@ let () =
         Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
       ) in
 
-  let modules'    = map do_module ir.modules     in
+  let modules'    = List.map do_module ir.modules     in
   let new_ir      = {ir with modules = modules'} in
   let serial      = IR.to_proto new_ir           in
   let encoded     = Writer.contents serial       in

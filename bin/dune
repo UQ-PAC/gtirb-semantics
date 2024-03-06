@@ -1,8 +1,8 @@
 (executable
  (public_name gtirb_semantics)
  (name main)
- (modules main compress auxdata)
- (libraries gtirb_semantics base64 yojson asli.libASL llvm_disas decompress.gz bigstringaf)
+ (modules main compress decoder)
+ (libraries gtirb_semantics base64 yojson asli.libASL llvm_disas decompress.gz bigstringaf containers)
  (flags     :standard (:include ../llvm-disas/llvmconf.sexp))
 )
 
