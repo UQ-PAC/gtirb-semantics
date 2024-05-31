@@ -170,6 +170,7 @@ let () =
     | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
   in
 
+  let unsupported op = let open Asl_ast in Stmt_TCall (FIdent ("unsupported_opcode", 0), [], [op], Unknown) in
   (* Evaluate each instruction one by one with a new environment for each *)
   let to_asli (op: bytes) (addr : int) : string list =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
@@ -184,7 +185,7 @@ let () =
           "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
           str str_bytes (Printexc.to_string exc);
         Printexc.print_backtrace stderr;
-        exit 1)
+          [p_raw @@ unsupported (Asl_ast.Expr_LitString str)])
     in tbl_update op do_dis
   in
   let rec asts opcodes addr =
