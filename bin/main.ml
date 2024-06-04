@@ -86,8 +86,10 @@ let () =
   let bytes = 
     let ic  = open_in Sys.argv.(binary_ind)     in 
     let len = in_channel_length ic              in
-    let _   = really_input_string ic 8          in
+    let magic = really_input_string ic 8        in
     let res = really_input_string ic (len - 8)  in
+    (* check for gtirb magic otherwise assume is raw protobuf *)
+    let res = if (String.starts_with ~prefix:"GTIRB" magic) then res else magic ^ res in
     close_in ic; 
     res
   in
@@ -218,7 +220,8 @@ let () =
     let new_auxes   = map ast_aux (serialisable) |> map (fun a -> (ast, a)) in
     let aux_joins   = combine orig_auxes new_auxes                        in
     let full_auxes  = map (fun ((l : (string * AuxData.t option) list), (m, b))
-        -> (m, Option.some b) :: l) aux_joins     in
+        -> let orig = filter (fun (s,_) -> s <> m) l in
+        (m, Option.some b) :: orig) aux_joins     in
     let mod_joins   = combine modules full_auxes  in
     let mod_fixed   = map (fun ((m : Module.t), a)
         -> {m with aux_data = a}) mod_joins in
@@ -226,9 +229,7 @@ let () =
     let text_only   = map (fun (m : Module.t)
         -> {m with sections = m.sections}) mod_fixed in
     let new_ir      = {ir with modules = text_only}                 in
-    (* Save some more space by deleting IR auxdata, only contains ddisasm version anyways *)
-    let out_gtirb   = {new_ir with aux_data = []} in
-    let serial      = IR.to_proto out_gtirb       in
+    let serial      = IR.to_proto new_ir in
     Writer.contents serial
   in
 
