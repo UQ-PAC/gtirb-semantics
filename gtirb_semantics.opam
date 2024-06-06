@@ -12,11 +12,13 @@ bug-reports: "https://github.com/UQ-PAC/gtirb-semantics/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.6"}
-  "Yojson"
+  "yojson"
   "asli"
   "ocaml-protoc-plugin"
-  "hexstring"
   "base64"
+  "ctypes"
+  "ctypes-foreign"
+  "conf-llvm"
   "odoc" {with-doc}
 ]
 build: [

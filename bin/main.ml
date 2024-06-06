@@ -5,9 +5,11 @@ open Gtirb_semantics.Module.Gtirb.Proto
 open Gtirb_semantics.Section.Gtirb.Proto
 open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
+open Gtirb_semantics.Symbol.Gtirb.Proto
 open LibASL
 open Bytes
 open List
+open Llvm_disas
 
 (* TYPES  *)
 
@@ -22,11 +24,23 @@ type rectified_block = {
   size      : int;
 }
 
+type instruction_semantics = {
+  address: int;
+  opcode_le: string;
+  opcode_be: string;
+  readable: string option;
+  statementlist: string list;
+  pretty_statementlist: string list;
+}
+
 (* ASLi semantic info for a block *)
 type ast_block = {
   auuid   : bytes;
-  asts    : string list list;
+  label: string option;
+  address : int;
+  asts    : instruction_semantics list;
 }
+
 
 (* Wrapper for polymorphic code/data/not-set block pre-rectification  *)
 type content_block = {
@@ -49,10 +63,6 @@ let usage_string  = "GTIRB_FILE OUTPUT_FILE"
 (* Protobuf spelunking  *)
 let ast           = "ast"
 (*let text          = ".text"*)
-
-(* JSON parsing/building  *)
-let hex           = "0x"
-
 
 (*  MAIN  *)
 let () = 
@@ -139,6 +149,13 @@ let () =
     mapmap (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
   in
 
+  let symmap = Hashtbl.create (List.fold_left (+) 0 (List.map (fun (m: Module.t) -> List.length m.symbols) ir.modules)) in
+  List.iter (fun (m: Module.t) -> (List.iter (fun (s: Symbol.t) -> 
+      match s.optional_payload with 
+      | `Referent_uuid b -> Hashtbl.add symmap b s
+        | _ ->  () 
+    ) m.symbols))
+      modules;
   (* Convert every opcode to big endianness *)
   let blk_orded : rectified_block list list =
     let need_flip = map (fun (m : Module.t)
@@ -158,7 +175,7 @@ let () =
   in
 
   (* hashtable for memoising disassembly results by opcode. *)
-  let tbl : (bytes, string list) Hashtbl.t = Hashtbl.create 10000 in
+  let tbl : (bytes, ((string list) * (string list))) Hashtbl.t = Hashtbl.create 10000 in
   let tbl_update k f =
     match Hashtbl.find_opt tbl k with
     | Some x -> x
@@ -173,21 +190,39 @@ let () =
   in
 
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (op: bytes) (addr : int) : string list =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim in
-    let address = Some (string_of_int addr)                                    in
-    let str     = hex ^ Hexstring.encode op                                    in
-    let str_bytes = Printf.sprintf "%08lX" (Bytes.get_int32_le op 0)           in
+  let to_asli (opcode_be: bytes) (addr : int) : instruction_semantics =
+    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
+    let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
+    let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
+    let address = Some (string_of_int addr)                                      in
+
+    (* below, opnum is the numeric opcode (necessarily BE) and opcode_* are always LE. *)
+    (* TODO: change argument of to_asli to follow this convention. *)
+    let opnum = Int32.to_int Bytes.(get_int32_be opcode_be 0)                    in
+    let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
+
+    let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
+    let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
+    let opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
     let do_dis () =
-      (match (Dis.retrieveDisassembly ?address env (Dis.build_env env) str) with
-      | res -> map (fun x -> p_raw x) res
+      (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
+      | res -> (map p_raw res, map p_pretty res)
       | exception exc ->
         Printf.eprintf
           "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
-          str str_bytes (Printexc.to_string exc);
+          opnum_str opcode_str (Printexc.to_string exc);
         Printexc.print_backtrace stderr;
         exit 1)
-    in tbl_update op do_dis
+    in
+    let insns_raw, insns_pretty = tbl_update opcode_be (do_dis) in
+    {
+      address = addr;
+      opcode_be = opnum_str;
+      opcode_le = opcode_str;
+      readable = assembly_of_bytes_opt opcode;
+      statementlist = insns_raw;
+      pretty_statementlist = insns_pretty;
+    }
   in
   let rec asts opcodes addr =
     match opcodes with
@@ -197,18 +232,43 @@ let () =
   let with_asts = mapmap (fun b 
     -> {
       auuid   = b.ruuid;
+      address = b.address;
       asts    = (asts b.opcodes b.address);
+      label   = Option.map (fun (s: Symbol.t) -> s.name) (Hashtbl.find_opt symmap b.ruuid)
     }) blk_orded
   in
 
   (* Massage asli outputs into a format which can
      be serialised and then deserialised by other tools  *)
+  let yojson_instsem (s: instruction_semantics) = 
+      `Assoc (List.append  (match s.readable with 
+        | Some x -> [("assembly", `String x)]
+        | None -> [])
+        [ ("addr", `Int s.address);
+          ("opcode_le", `String s.opcode_le); ("opcode_be", `String s.opcode_be);
+          ("semantics", `List (List.map (fun s -> `String s) s.statementlist));
+          ("pretty_semantics", `List (List.map (fun s -> `String s) s.pretty_statementlist));
+        ]
+      )
+      in
   let serialisable: string list =
-      let to_list x = `List x  in
-    let jsoned (asts: string list list )  : Yojson.Safe.t = mapmap (fun s -> `String s) asts |> map to_list |> to_list in
+    let to_list x = `List x in
+    let jsoned (asts: instruction_semantics list )  : Yojson.Safe.t = map (fun s -> yojson_instsem s) asts |>  to_list in
     (*let quote bin = strung ^ (Bytes.to_string bin) ^ strung      in *)
-    let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun b -> (((Base64.encode_exn (Bytes.to_string  b.auuid))), (jsoned b.asts))) l)) with_asts) in
-      map (fun j -> Yojson.Safe.to_string j) paired
+    let paired: Yojson.Safe.t  list = (map (fun l -> `Assoc (map (fun (b: ast_block) -> (((Base64.encode_exn (Bytes.to_string  b.auuid)), 
+        (`Assoc (List.append  (match b.label with 
+              | Some l -> [("label", `String l)]
+              | None -> []
+          )
+        [
+          ("addr", `Int b.address);
+          ("instructions", (jsoned b.asts))
+        ]
+        )
+        )) 
+      )) l)) with_asts) in
+      List.iter (fun f -> Yojson.Safe.pretty_to_channel stderr f) paired; 
+      map (Yojson.Safe.to_string) paired
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
@@ -236,6 +296,6 @@ let () =
   (* Reserialise to disk *)
   let out = open_out_bin Sys.argv.(out_ind) in
   (
-    Printf.fprintf out "%s" encoded;
+    output_string out encoded;
     close_out out;
   )

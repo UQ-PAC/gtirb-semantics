@@ -1,4 +1,8 @@
 (executable
  (public_name gtirb_semantics)
  (name main)
- (libraries base64 yojson gtirb_semantics asli.libASL))
+ (modules main)
+ (libraries gtirb_semantics base64 yojson asli.libASL llvm_disas)
+ (flags     :standard (:include ../llvm-disas/llvmconf.sexp))
+)
+
