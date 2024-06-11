@@ -63,6 +63,8 @@ import subprocess
 import collections
 import collections.abc
 
+args: argparse.Namespace  # global command-line arguments object....
+
 PROTO_VERSION = gtirb.version.PROTOBUF_VERSION
 
 llvm_mc = shutil.which('llvm-mc')
@@ -74,16 +76,24 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 def _decode_isns(isns: collections.abc.Iterable[bytes]):
+  isns = list(isns)
+  if not isns: return {}
+
   hex = ' '.join(f'0x{x:02x}' for opcode_bytes in isns for x in opcode_bytes)
-  out = subprocess.check_output([llvm_mc, '--disassemble', '--arch=arm64'],
+  out = subprocess.check_output([llvm_mc, '--disassemble', '--arch=arm64'] + args.extra,
                                 input=hex, encoding='ascii')
+
   out = out.replace('.text', '', 1).strip()  # discard first .text
+  assert out, f"llvm-mc returned empty output. {isns=}"  # should never be empty since len(isns) != 0
   outs = (x.strip().replace('\t', ' ') for x in out.split('\n'))
-  return dict(zip(isns, outs))
+
+  ret = dict(zip(isns, outs))
+  assert len(isns) == len(ret), f"llvm-mc isn count mismatch. {len(isns)=} {len(ret)=}"
+  return ret
 
 def decode_isns(isns: collections.abc.Iterable[bytes]):
   out = {}
-  for x in chunks(isns, 1000):
+  for x in chunks(isns, args.chunks):
     out |= _decode_isns(x)
   return out 
 
@@ -103,10 +113,11 @@ def do_block(uuid: str, blk: gtirb.CodeBlock, contents: bytes, sem, isn_names: d
     warnings.warn(f"semantics and gtirb instruction counts differ in block {uuid!r}. "
                   f"semantics: {len(sem)}, gtirb: {blksize / isize}")
 
-  return [
+  ret = [
     { isn_names[slice(i)]: sem }
     for i, sem in enumerate(sem)
   ]
+  return ret
 
 def b64_uuid(uuid: uuid.UUID) -> str:
   return base64.b64encode(uuid.bytes).decode('ascii')
@@ -188,12 +199,21 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
   return out
 
 def main():
-  argp = argparse.ArgumentParser()
+  global args
+
+  argp = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   argp.add_argument('gts_input', help='.gts input file')
   argp.add_argument('json_output', nargs='?', type=argparse.FileType('w'),
-                    help='.json output file (default: stdout)',
+                    help='.json output file',
                     default=sys.stdout)
+  argp.add_argument('--chunks', type=int, default=1000,
+                    help='size of instruction batches when invoking llvm-mc. set to 1 to debug failing opcodes.')
+  argp.add_argument('--args', dest='extra', default='-mattr=v9a',
+                    help='extra arguments to pass to llvm-mc. will be whitespace-split.')
+
   args = argp.parse_args()
+  assert args.chunks > 0
+  args.extra = args.extra.split()
 
   # make a .gtirb file with appropriate magic number
   bio = io.BytesIO()
@@ -214,7 +234,7 @@ def main():
   print('decoding', len(isns), 'opcodes...', file=sys.stderr, end=' ', flush=True)
   isn_names = decode_isns(tuple(isns.keys()))
   print('done', file=sys.stderr)
-  assert len(isn_names) == len(isns), f"llvm-mc instruction count mismatch {len(isn_names)=} {len(isns)=}"
+  assert isn_names.keys() == isns.keys(), f"llvm-mc instruction count mismatch {len(isn_names)=} {len(isns)=}"
 
   for mod in ir.modules:
     out.append(do_module(mod, isn_names))
