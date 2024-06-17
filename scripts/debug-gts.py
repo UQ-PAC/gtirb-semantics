@@ -38,6 +38,7 @@ import io
 import sys
 import uuid
 import json
+import shlex
 try:
   import gtirb
 except ImportError:
@@ -60,15 +61,23 @@ import gtirb.ir
 import argparse
 import warnings
 import subprocess
+import dataclasses
 import collections
 import collections.abc
 
-args: argparse.Namespace  # global command-line arguments object....
+@dataclasses.dataclass
+class Arguments:
+  llvmmc_args: list[str]
+  chunk_size: int
+
+arguments: Arguments  # global command-line arguments object....
+
 
 PROTO_VERSION = gtirb.version.PROTOBUF_VERSION
 
 llvm_mc = shutil.which('llvm-mc')
 assert llvm_mc, "could not find llvm-mc in PATH, check that llvm is installed."
+
 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -80,7 +89,7 @@ def _decode_isns(isns: collections.abc.Iterable[bytes]):
   if not isns: return {}
 
   hex = ' '.join(f'0x{x:02x}' for opcode_bytes in isns for x in opcode_bytes)
-  out = subprocess.check_output([llvm_mc, '--disassemble', '--arch=arm64'] + args.extra,
+  out = subprocess.check_output([llvm_mc, '--disassemble', '--arch=arm64'] + arguments.llvmmc_args,
                                 input=hex, encoding='ascii')
 
   out = out.replace('.text', '', 1).strip()  # discard first .text
@@ -93,7 +102,7 @@ def _decode_isns(isns: collections.abc.Iterable[bytes]):
 
 def decode_isns(isns: collections.abc.Iterable[bytes]):
   out = {}
-  for x in chunks(isns, args.chunks):
+  for x in chunks(isns, arguments.chunk_size):
     out |= _decode_isns(x)
   return out 
 
@@ -199,21 +208,24 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
   return out
 
 def main():
-  global args
 
   argp = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   argp.add_argument('gts_input', help='.gts input file')
   argp.add_argument('json_output', nargs='?', type=argparse.FileType('w'),
                     help='.json output file',
                     default=sys.stdout)
-  argp.add_argument('--chunks', type=int, default=1000,
-                    help='size of instruction batches when invoking llvm-mc. set to 1 to debug failing opcodes.')
-  argp.add_argument('--args', dest='extra', default='-mattr=v9a',
-                    help='extra arguments to pass to llvm-mc. will be whitespace-split.')
+  argp.add_argument('--debug', action='store_true',
+                    help='prioritise debugging failing opcodes instead of performance.')
+  argp.add_argument('--args', dest='llvmmc_args', default='-mattr=v9a',
+                    help='extra arguments to pass to llvm-mc. will be shell split.')
 
   args = argp.parse_args()
-  assert args.chunks > 0
-  args.extra = args.extra.split()
+
+  global arguments
+  arguments = Arguments(
+    llvmmc_args = shlex.split(args.llvmmc_args),
+    chunk_size = 1 if args.debug else 1000,
+  )
 
   # make a .gtirb file with appropriate magic number
   bio = io.BytesIO()
