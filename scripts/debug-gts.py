@@ -216,7 +216,7 @@ def main():
                     default=sys.stdout)
   argp.add_argument('--debug', action='store_true',
                     help='prioritise debugging failing opcodes instead of performance.')
-  argp.add_argument('--args', dest='llvmmc_args', default='-mattr=v9a',
+  argp.add_argument('--args', dest='llvmmc_args', default='-mattr=v9.3a',
                     help='extra arguments to pass to llvm-mc. will be shell split.')
 
   args = argp.parse_args()
