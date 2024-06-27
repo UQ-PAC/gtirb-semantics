@@ -93,15 +93,12 @@ let do_module (m: Module.t): Module.t =
 
   (* Resolve polymorphic block variants to isolate only useful info *)
   let codes_only : rectified_block list = 
-    let rectify = function
-      | `Code (c : CodeBlock.t) -> rblock c.size c.uuid
-      | _                       -> rblock 0 empty
+    let rectify (b : content_block) : rectified_block option = match b.block.value with
+      | `Code (c : CodeBlock.t) -> Some { ruuid = c.uuid; size = c.size; offset = b.block.offset;
+                                          address = b.address + b.block.offset; contents = b.raw; opcodes = []; }
+      | _                       -> None
     in
-    let poly_blks   = map (fun b -> {(rectify b.block.value)
-      with offset   = b.block.offset;
-      contents = b.raw;
-      address  = b.address + b.block.offset}) ival_blks
-    in 
+    let poly_blks = List.filter_map rectify ival_blks in
     filter (fun b -> b.size > 0) poly_blks in
   
   (* Section up byte interval contents to their respective blocks and take individual opcodes *)
@@ -150,7 +147,7 @@ let do_module (m: Module.t): Module.t =
 
     let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
     let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
-    let opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
+    let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
     let do_dis () =
       (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
       | res -> (map p_raw res, map p_pretty res)
