@@ -6,8 +6,6 @@ open Gtirb_semantics.Section.Gtirb.Proto
 open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
 open LibASL
-open Bytes
-open List
 
 (* TYPES  *)
 
@@ -41,15 +39,15 @@ let json_file = ref ""
 let speclist = [
   ("--json", Arg.Set_string json_file, "output json semantics to given file (default: none, use /dev/stderr for stderr)");
 ]
-let rest_index = ref (-1)
+let count_pos_args = ref (0)
 let in_file = ref "/nowhere/input"
 let out_file = ref "/nowhere/output"
 let handle_rest_arg arg =
-  rest_index := 1 + !rest_index;
-  match !rest_index with
-  | 0 -> in_file := arg
-  | 1 -> out_file := arg
-  | _ -> failwith "argc unexpected"
+  count_pos_args := 1 + !count_pos_args;
+  match !count_pos_args with
+  | 1 -> in_file := arg
+  | 2 -> out_file := arg
+  | _ -> ()
 
 
 let usage_string  = "GTIRB_FILE OUTPUT_FILE [--json JSON_SEMANTICS_OUTPUT]"
@@ -60,71 +58,57 @@ let usage_message = Printf.sprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_
 let ast           = "ast"
 (*let text          = ".text"*)
 
-
-(* Convenience *)
-let _mapmap (f: 'a -> 'b) (l: 'a list list) = map (map f) l
-
-(* Record convenience *)
-let rblock sz id = {
-  ruuid     = id;
-  contents  = empty;
-  opcodes   = [];
-  address   = 0;
-  offset    = 0;
-  size      = sz;
-}
-
 (* Byte & array manipulation convenience functions *)
-let b_tl op n   = Bytes.sub op n (Bytes.length op - n)
-let b_hd op n   = Bytes.sub op 0 n
+let _b_tl op n   = Bytes.sub op n (Bytes.length op - n)
+let _b_hd op n   = Bytes.sub op 0 n
 
+let b64_of_uuid uuid = Base64.encode_exn (Bytes.to_string uuid)
+
+let endian_reverse (opcode: bytes): bytes = 
+  let len = Bytes.length opcode in
+  let getrev i = Bytes.get opcode (len - 1 - i) in
+  Bytes.init len getrev
+
+
+let do_block ~(need_flip: bool) (b, c : content_block * CodeBlock.t): rectified_block =
+  let cut_op contents i =
+    let bytes = Bytes.sub contents (i * opcode_length) opcode_length in
+    if need_flip then endian_reverse bytes else bytes in
+
+  let size = c.size in
+  let offset = b.block.offset in
+  let ruuid = c.uuid in
+  let address = b.address in
+  let num_opcodes = c.size / opcode_length in
+  if (size <> num_opcodes * opcode_length) then
+    failwith @@ "block size is not a multiple of opcode size: " ^ b64_of_uuid ruuid;
+
+  let contents = Bytes.sub b.raw offset size in
+  let opcodes = List.init num_opcodes (cut_op contents) in
+
+  { size; offset; ruuid; contents; opcodes; address }
   
+
 let do_module (m: Module.t): Module.t = 
+
+  let all_sects = m.sections in
+  let intervals = List.flatten @@ List.map (fun (s : Section.t) -> s.byte_intervals) all_sects in
+
+  let content_block (i: ByteInterval.t) (b: Block.t) =
+    {block = b; raw = i.contents; address = i.address} in
+
   let ival_blks : content_block list =
-    let all_sects = m.sections in
-    let all_texts = all_sects in
-    let intervals = map (fun (s : Section.t) -> s.byte_intervals) all_texts |> flatten in
+    List.flatten @@ List.map (fun i -> List.map (fun b -> content_block i b) i.blocks) intervals in
 
-    let content_block (i: ByteInterval.t) (b: Block.t) =
-      {block = b; raw = i.contents; address = i.address} in
+  (* Resolve polymorphic block variants to filter only code blocks *)
+  let extract_code (b : content_block) = match b.block.value with
+      | `Code (c : CodeBlock.t) -> Some (b, c)
+      | _                       -> None in
 
-    flatten @@ map (fun i -> map (fun b -> content_block i b) i.blocks) intervals
-  in
-
-  (* Resolve polymorphic block variants to isolate only useful info *)
-  let codes_only : rectified_block list = 
-    let rectify (b : content_block) : rectified_block option = match b.block.value with
-      | `Code (c : CodeBlock.t) -> Some { ruuid = c.uuid; size = c.size; offset = b.block.offset;
-                                          address = b.address + b.block.offset; contents = b.raw; opcodes = []; }
-      | _                       -> None
-    in
-    let poly_blks = List.filter_map rectify ival_blks in
-    filter (fun b -> b.size > 0) poly_blks in
-  
-  (* Section up byte interval contents to their respective blocks and take individual opcodes *)
-  let op_cuts : rectified_block list  =
-    let trimmed = map (fun b -> 
-        {b with contents = Bytes.sub b.contents b.offset b.size}) codes_only in
-    let rec cut_ops contents =
-      if Bytes.length contents <= opcode_length then [contents]
-      else (b_hd contents opcode_length) :: cut_ops (b_tl contents opcode_length)
-    in
-    map (fun b -> {b with opcodes = cut_ops b.contents}) trimmed
-  in
+  let cblocks = List.filter_map extract_code ival_blks in
 
   let need_flip = m.byte_order = ByteOrder.LittleEndian in
-
-  (* Convert every opcode to big endianness *)
-  let blk_orded : rectified_block list =
-    let endian_reverse (opcode: bytes): bytes = 
-      let len = Bytes.length opcode in
-      let getrev i = Bytes.get opcode (len - 1 - i) in
-      Bytes.(init len getrev) in
-    let flip_opcodes block = {block with opcodes = map endian_reverse block.opcodes}  in
-    let fix_mod : rectified_block list -> rectified_block list = if need_flip then map flip_opcodes else Fun.id
-    in
-    fix_mod op_cuts
-  in
+  let rblocks = List.map (do_block ~need_flip) cblocks in 
 
   Printexc.record_backtrace true;
   let env =
@@ -150,7 +134,7 @@ let do_module (m: Module.t): Module.t =
     let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
     let do_dis () =
       (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
-      | res -> (map p_raw res, map p_pretty res)
+      | res -> (List.map p_raw res, List.map p_pretty res)
       | exception exc ->
         Printf.eprintf
           "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
@@ -168,11 +152,10 @@ let do_module (m: Module.t): Module.t =
     if List.length blk_orded > 10000
       then Parmap.parmap ~ncores:2 f Parmap.(L l)
       else map f l in *)
-  let map' = map in
-  let with_asts = map' (fun b -> {
+  let with_asts = List.map (fun b -> {
       auuid   = b.ruuid;
       asts    = asts b.opcodes b.address;
-    }) blk_orded
+    }) rblocks
   in
 
   (* Massage asli outputs into a format which can
@@ -182,12 +165,12 @@ let do_module (m: Module.t): Module.t =
     let to_string x = `String x in
     let jsoned (asts: string list list) : Yojson.Safe.t =
       to_list @@ List.map (fun x -> to_list @@ List.map to_string x) asts in
+
     let paired: Yojson.Safe.t =
       `Assoc (
-        map
-          (fun (b: ast_block) -> (Base64.encode_exn (Bytes.to_string b.auuid)), jsoned b.asts)
+        List.map
+          (fun (b: ast_block) -> (b64_of_uuid b.auuid, jsoned b.asts))
           with_asts) in
-    Yojson.Safe.pretty_to_channel stderr paired; 
 
     let json_str = Yojson.Safe.pretty_to_string paired in
     if !json_file <> "" then begin
@@ -202,17 +185,19 @@ let do_module (m: Module.t): Module.t =
   let orig_auxes   = m.aux_data in
   (* Turn the translation map + compressed semantics into auxdata and slide it in with the rest *)
   let ast_aux data = AuxData.make ?type_name:(Some ast) ?data:(Some (Bytes.of_string data)) () in
-  let new_aux      = ast_aux (serialisable) in
+  let new_aux      = ast_aux serialisable in
   let full_auxes   = ("ast", Some new_aux) :: orig_auxes in
   let mod_fixed    = {m with aux_data = full_auxes} in
   mod_fixed
 
 
 (*  MAIN  *)
-let () = 
+let () =
   (* BEGINNING *)
   Arg.parse speclist handle_rest_arg usage_message;
   (* Printf.eprintf "gtirb-semantics: %s -> %s\n" !in_file !out_file; *)
+  if !count_pos_args <> 2 then
+    (output_string stderr usage_message; exit 1);
 
   (* Read bytes from the file, skip first 8 *) 
   let bytes = 
@@ -238,10 +223,10 @@ let () =
         Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
       ) in
 
-  let modules'    = map do_module ir.modules     in
-  let new_ir      = {ir with modules = modules'} in
-  let serial      = IR.to_proto new_ir           in
-  let encoded     = Writer.contents serial       in
+  let modules'    = List.map do_module ir.modules in
+  let new_ir      = {ir with modules = modules'}  in
+  let serial      = IR.to_proto new_ir            in
+  let encoded     = Writer.contents serial        in
 
   (* Reserialise to disk *)
   let out = open_out_bin !out_file in
