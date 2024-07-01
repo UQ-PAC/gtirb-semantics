@@ -167,7 +167,7 @@ let () =
 
   Printexc.record_backtrace true;
   let env =
-    match Eval.aarch64_evaluation_environment () with
+    match Arm_env.aarch64_evaluation_environment () with
     | Some e -> e
     | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
   in
