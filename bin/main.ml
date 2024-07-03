@@ -55,7 +55,6 @@ let usage_message = Printf.sprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_
 (* ASL specifications are from the bundled ARM semantics in libASL. *)
 
 (* Protobuf spelunking  *)
-let ast           = "ast"
 (*let text          = ".text"*)
 
 (* Byte & array manipulation convenience functions *)
@@ -112,7 +111,7 @@ let do_module (m: Module.t): Module.t =
 
   Printexc.record_backtrace true;
   let env =
-    match Eval.aarch64_evaluation_environment () with
+    match Arm_env.aarch64_evaluation_environment () with
     | Some e -> e
     | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
   in
@@ -172,7 +171,7 @@ let do_module (m: Module.t): Module.t =
           (fun (b: ast_block) -> (b64_of_uuid b.auuid, jsoned b.asts))
           with_asts) in
 
-    let json_str = Yojson.Safe.pretty_to_string paired in
+    let json_str = Yojson.Safe.to_string paired in
     if !json_file <> "" then begin
       let f = open_out !json_file in
       output_string f json_str;
@@ -182,11 +181,13 @@ let do_module (m: Module.t): Module.t =
   in 
 
   (* Sandwich ASTs into the IR amongst the other auxdata *)
-  let orig_auxes   = m.aux_data in
+  let aux_key      = "ast" in
+  (* Omit ast auxdata if it already exists. *)
+  let orig_auxes   = List.filter (fun (k, _) -> k <> aux_key) m.aux_data in
   (* Turn the translation map + compressed semantics into auxdata and slide it in with the rest *)
-  let ast_aux data = AuxData.make ?type_name:(Some ast) ?data:(Some (Bytes.of_string data)) () in
+  let ast_aux data = AuxData.make ?type_name:(Some aux_key) ?data:(Some (Bytes.of_string data)) () in
   let new_aux      = ast_aux serialisable in
-  let full_auxes   = ("ast", Some new_aux) :: orig_auxes in
+  let full_auxes   = (aux_key, Some new_aux) :: orig_auxes in
   let mod_fixed    = {m with aux_data = full_auxes} in
   mod_fixed
 
