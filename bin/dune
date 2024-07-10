@@ -1,4 +1,5 @@
 (executable
  (public_name gtirb_semantics)
  (name main)
+ (flags (:standard -w -69))
  (libraries base64 yojson gtirb_semantics asli.libASL))
