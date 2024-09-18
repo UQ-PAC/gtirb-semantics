@@ -100,7 +100,7 @@ def chunks(lst, n):
         yield lst[i:i + n]
 
 def format_address(addr: int):
-  return f'0x{addr:08x}'
+  return f'0x{addr:08x} ({addr})'
 
 def _decode_isns(isns: collections.abc.Iterable[bytes]):
   isns = list(isns)
@@ -126,6 +126,7 @@ def decode_isns(isns: collections.abc.Iterable[bytes]):
 
 def do_block(uuid: str, blk: gtirb.CodeBlock, contents: bytes, sem, isn_names: dict[bytes, str]):
   blksize = blk.size
+  # offset within the byte interval. many code blocks may point into one byte interval.
   off = blk.offset
 
   isize = 32 // 8  # == 4 bytes per instruction
@@ -142,7 +143,7 @@ def do_block(uuid: str, blk: gtirb.CodeBlock, contents: bytes, sem, isn_names: d
 
   ret = [
     {
-      "address": format_address(blk.address + off + i * isize),
+      "address": format_address(blk.address + i * isize),
       "assembly": isn_names[slice(i)],
       "semantics": sem,
     }
