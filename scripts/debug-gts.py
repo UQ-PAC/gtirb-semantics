@@ -18,17 +18,32 @@ Given a .gts file, prints its semantics to stdout but augmented with
 an instruction mnemonic alongside each instruction's statement list.
 
 example output:
+
 {
-  "XPbERKxyS8CPh9nu9/oe8A==": {
-    "name": "main [entry] [  1/675]",
-    "address": 4204032,
+  "ByM62E8HQg2Gm/cINLiC+g==": {
+    "name": "main [entry] [1/1]",
+    "address": "0x00400684 (4195972)",
     "code": [
       {
-        "adrp x2, #184320": [
-          "Stmt_Assign(LExpr_Array(LExpr_Var(_R),Expr_LitInt(\"2\")),Expr_LitBits(\"0000000000000000000000000000000000000000010000101111000000000000\"))"
+        "address": "0x00400684 (4195972)",
+        "assembly": "mov w0, #100                        // =0x64",
+        "semantics": [
+          "Stmt_Assign(LExpr_Array(LExpr_Var(\"_R\"),0),'0000000000000000000000000000000000000000000000000000000001100100')"
         ]
       },
-    ]
+      {
+        "address": "0x00400688 (4195976)",
+        "assembly": "ret",
+        "semantics": [
+          "Stmt_Assign(LExpr_Var(\"BTypeNext\"),'00')",
+          "Stmt_Assign(LExpr_Var(\"__BranchTaken\"),Expr_Var(\"TRUE\"))",
+          "Stmt_Assign(LExpr_Var(\"_PC\"),Expr_Array(Expr_Var(\"_R\"),30))"
+        ]
+      }
+    ],
+    "successors": {
+      "jhShNicnSJSfV7sLH87mVQ==": "Unresolved ProxyBlock / Edge.Label(type=Edge.Type.Return, conditional=False, direct=False, )"
+    }
   },
 }
 """
@@ -84,6 +99,9 @@ def chunks(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
+def format_address(addr: int):
+  return f'0x{addr:08x} ({addr})'
+
 def _decode_isns(isns: collections.abc.Iterable[bytes]):
   isns = list(isns)
   if not isns: return {}
@@ -108,6 +126,7 @@ def decode_isns(isns: collections.abc.Iterable[bytes]):
 
 def do_block(uuid: str, blk: gtirb.CodeBlock, contents: bytes, sem, isn_names: dict[bytes, str]):
   blksize = blk.size
+  # offset within the byte interval. many code blocks may point into one byte interval.
   off = blk.offset
 
   isize = 32 // 8  # == 4 bytes per instruction
@@ -123,7 +142,11 @@ def do_block(uuid: str, blk: gtirb.CodeBlock, contents: bytes, sem, isn_names: d
                   f"semantics: {len(sem)}, gtirb: {blksize / isize}")
 
   ret = [
-    { isn_names[slice(i)]: sem }
+    {
+      "address": format_address(blk.address + i * isize),
+      "assembly": isn_names[slice(i)],
+      "semantics": sem,
+    }
     for i, sem in enumerate(sem)
   ]
   return ret
@@ -180,21 +203,22 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
   out = {}
   for sec in mod.sections:
     for blk in sec.code_blocks:
-        if not isinstance(blk, gtirb.CodeBlock): continue
+      if not isinstance(blk, gtirb.CodeBlock): continue
 
-        uuid = blk.uuid
+      uuid = blk.uuid
 
-        b64 = b64_uuid(uuid)
-        friendly = friendly_block(mod, blk)
-        out[b64] = {
-          'name': friendly,
-          'address': blk.address,
-          'code': do_block(friendly, blk, bytes(blk.byte_interval.contents), sems[b64], isn_names), # type: ignore
-          'successors': {
-            friendly_block(mod, x.target, True) : str(x.label) for x in blk.outgoing_edges
-          },
-        }
-        gtirb_ids.add(b64)
+      b64 = b64_uuid(uuid)
+      friendly = friendly_block(mod, blk)
+      out[b64] = {
+        'name': friendly,
+        'address': format_address(blk.address),
+        'code': do_block(friendly, blk, bytes(blk.byte_interval.contents), sems[b64], isn_names), # type: ignore
+        'successors': {
+          b64_uuid(x.target.uuid): friendly_block(mod, x.target) + ' / ' + str(x.label)
+          for x in blk.outgoing_edges
+        },
+      }
+      gtirb_ids.add(b64)
 
   out = list(out.items())
   out.sort(key=lambda x: x[1]['address'])
