@@ -22,17 +22,17 @@ example output:
 {
   "ByM62E8HQg2Gm/cINLiC+g==": {
     "name": "main [entry] [1/1]",
-    "address": "0x00400684",
+    "address": "0x00400684 (4195972)",
     "code": [
       {
-        "address": "0x004007c8",
+        "address": "0x00400684 (4195972)",
         "assembly": "mov w0, #100                        // =0x64",
         "semantics": [
           "Stmt_Assign(LExpr_Array(LExpr_Var(\"_R\"),0),'0000000000000000000000000000000000000000000000000000000001100100')"
         ]
       },
       {
-        "address": "0x004007cc",
+        "address": "0x00400688 (4195976)",
         "assembly": "ret",
         "semantics": [
           "Stmt_Assign(LExpr_Var(\"BTypeNext\"),'00')",
@@ -44,7 +44,7 @@ example output:
     "successors": {
       "jhShNicnSJSfV7sLH87mVQ==": "Unresolved ProxyBlock / Edge.Label(type=Edge.Type.Return, conditional=False, direct=False, )"
     }
-  }
+  },
 }
 """
 
