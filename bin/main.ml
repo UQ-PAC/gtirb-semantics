@@ -138,7 +138,7 @@ let do_module (m: Module.t): Module.t =
       | res -> (List.map p_raw res, List.map p_pretty res)
       | exception exc ->
         Printf.eprintf
-          "error during aslp disassembly (unsupoprted opcode %s, bytes %s):\n\nException : %s\n"
+          "error during aslp disassembly (unsupported opcode %s, bytes %s):\n\nException : %s\n"
           opnum_str opcode_str (Printexc.to_string exc);
           (* Printexc.print_backtrace stderr; *)
           ([p_raw @@ unsupported opnum_dec_str], [p_pretty @@ unsupported opnum_dec_str]))
