@@ -127,19 +127,21 @@ let do_module (m: Module.t): Module.t =
     (* TODO: change argument of to_asli to follow this convention. *)
     let opnum = Int32.to_int Bytes.(get_int32_be opcode_be 0)                    in
     let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
+    let opnum_dec_str = Printf.sprintf "%lu" Int32.(of_int opnum)                 in
 
     let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
     let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
     let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
+    let unsupported op = let open Asl_ast in Stmt_TCall (FIdent ("unsupported_opcode", 0), [], [Expr_LitInt op], Unknown) in
     let do_dis () =
       (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
       | res -> (List.map p_raw res, List.map p_pretty res)
       | exception exc ->
         Printf.eprintf
-          "error during aslp disassembly (opcode %s, bytes %s):\n\nFatal error: exception %s\n"
+          "error during aslp disassembly (unsupoprted opcode %s, bytes %s):\n\nException : %s\n"
           opnum_str opcode_str (Printexc.to_string exc);
-        Printexc.print_backtrace stderr;
-        exit 1)
+          (* Printexc.print_backtrace stderr; *)
+          ([p_raw @@ unsupported opnum_dec_str], [p_pretty @@ unsupported opnum_dec_str]))
     in fst @@ do_dis ()
   in
   let rec asts opcodes addr =
