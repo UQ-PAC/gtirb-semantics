@@ -6,6 +6,7 @@ open Gtirb_semantics.Section.Gtirb.Proto
 open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
 open LibASL
+open Either
 
 (* TYPES  *)
 
@@ -20,10 +21,16 @@ type rectified_block = {
   size      : int;
 }
 
+
+type dis_error = {
+  opcode: string;
+  error: string
+}
+
 (* ASLi semantic info for a block *)
 type ast_block = {
   auuid   : bytes;
-  asts    : string list list;
+  asts    : ((string list, dis_error) Either.t) list;
 }
 
 (* Wrapper for polymorphic code/data/not-set block pre-rectification  *)
@@ -32,6 +39,7 @@ type content_block = {
   raw     : bytes;
   address : int; 
 }
+
 
 (* CONSTANTS  *)
 let opcode_length = 4
@@ -116,8 +124,9 @@ let do_module (m: Module.t): Module.t =
     | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
   in
 
+
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (opcode_be: bytes) (addr : int) : string list =
+  let to_asli (opcode_be: bytes) (addr : int) : ((string list, dis_error) Either.t) =
     let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
     let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
     let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
@@ -127,22 +136,25 @@ let do_module (m: Module.t): Module.t =
     (* TODO: change argument of to_asli to follow this convention. *)
     let opnum = Int32.to_int Bytes.(get_int32_be opcode_be 0)                    in
     let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
-    let opnum_dec_str = Printf.sprintf "%lu" Int32.(of_int opnum)                 in
 
     let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
     let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
     let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
-    let unsupported op = let open Asl_ast in Stmt_TCall (FIdent ("unsupported_opcode", 0), [], [Expr_LitInt op], Unknown) in
-    let do_dis () =
+
+    let do_dis () : ((string list * string list), dis_error) Either.t =
       (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
-      | res -> (List.map p_raw res, List.map p_pretty res)
+      | res -> Left (List.map p_raw res, List.map p_pretty res)
       | exception exc ->
         Printf.eprintf
           "error during aslp disassembly (unsupported opcode %s, bytes %s):\n\nException : %s\n"
           opnum_str opcode_str (Printexc.to_string exc);
           (* Printexc.print_backtrace stderr; *)
-          ([p_raw @@ unsupported opnum_dec_str], [p_pretty @@ unsupported opnum_dec_str]))
-    in fst @@ do_dis ()
+          Right {
+            opcode =  opnum_str;
+            error = (Printexc.to_string exc)
+          }
+      )
+    in map_left fst (do_dis ())
   in
   let rec asts opcodes addr =
     match opcodes with
@@ -164,8 +176,14 @@ let do_module (m: Module.t): Module.t =
   let serialisable: string =
     let to_list x = `List x in
     let to_string x = `String x in
-    let jsoned (asts: string list list) : Yojson.Safe.t =
-      to_list @@ List.map (fun x -> to_list @@ List.map to_string x) asts in
+    let jsoned (asts: (string list, dis_error) Either.t list) : Yojson.Safe.t =
+      let toj (x: (string list, dis_error) Either.t) : Yojson.Safe.t = match x with
+        | Left sl -> to_list @@ List.map to_string sl
+        | Right err -> `Assoc [
+          ("decode_error", `Assoc [("opcode", (`String err.opcode)); ("error", `String err.error)] )
+        ]
+      in
+      to_list @@ List.map toj asts in 
 
     let paired: Yojson.Safe.t =
       `Assoc (
