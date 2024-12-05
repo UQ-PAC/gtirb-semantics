@@ -65,7 +65,7 @@ def main():
   g = g.add_mutually_exclusive_group()
   g.add_argument('--from', '-i', dest='fr', choices=['json', 'proto'], default=None, help='type of input (default: proto). if given, --to is set to the other type.')
   g.add_argument('--to', '-o', choices=['json', 'proto'], default=None, help='type of output (default: json). if given, --from is set to the other type.')
-  g.add_argument('--idem', choices=['json', 'proto'], default=None, nargs='?', const='proto', help='instead of converting, perform an idempotent normalisation of the given file type (default: proto)')
+  g.add_argument('--idem', choices=['json', 'proto'], default=None, help='instead of converting, perform an idempotent normalisation of the given file type')
   argp.add_argument('--proto', '-p', type=str, default=_gtirb, help='directory of .proto files (default: bundled GTIRB .proto files)')
   argp.add_argument('--msgtype', '-m', type=str, default=_gtirb_ir_type, help='protobuf message type (default: gtirb.proto.IR)')
   argp.add_argument('input', nargs='?', type=argparse.FileType('rb'), default=sys.stdin.buffer, help='input file path (default: stdin)')
@@ -152,7 +152,7 @@ def main():
       preserving_proto_field_name=True
     )
 
-    data = json.dumps(msgdict, sort_keys=True, indent=0)
+    data = json.dumps(msgdict, sort_keys=True, indent=2)
     args.output.write(data.encode('utf-8'))
 
 
