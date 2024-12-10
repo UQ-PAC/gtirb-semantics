@@ -53,6 +53,16 @@ def die(*args) -> typing.NoReturn:
   log.error(' ' + ' '.join(map(str,args)))
   sys.exit(1)
 
+def path_arg(should_exist: bool=False) -> typing.Callable[[str], pathlib.Path]:
+  def go(p: str) -> pathlib.Path:
+    path = pathlib.Path(p)
+    if should_exist and not path.exists():
+      raise argparse.ArgumentTypeError('path must exist')
+    if not path.parent.exists():
+      raise argparse.ArgumentTypeError('parent of path must exist')
+    return path
+  return go
+
 def main():
   logging.basicConfig(level=logging.WARN)
 
@@ -68,8 +78,8 @@ def main():
   g.add_argument('--idem', choices=['json', 'proto'], default=None, help='instead of converting, perform an idempotent normalisation of the given file type')
   argp.add_argument('--proto', '-p', type=str, default=_gtirb, help='directory of .proto files (default: bundled GTIRB .proto files)')
   argp.add_argument('--msgtype', '-m', type=str, default=_gtirb_ir_type, help='protobuf message type (default: gtirb.proto.IR)')
-  argp.add_argument('input', nargs='?', type=argparse.FileType('rb'), default=sys.stdin.buffer, help='input file path (default: stdin)')
-  argp.add_argument('output', nargs='?', type=argparse.FileType('ab+'), default=sys.stdout.buffer, help='output file path (default: stdout)')
+  argp.add_argument('input', type=path_arg(True), help='input file path')
+  argp.add_argument('output', nargs='?', type=path_arg(False), help='output file path')
 
   args = argp.parse_args()
   debug(args)
@@ -87,6 +97,11 @@ def main():
     args.fr = args.to = args.idem
   else:
     args.fr, args.to = 'proto', 'json'
+  if args.output is None:
+    if args.idem:
+      args.output = args.input
+    else:
+      raise argparse.ArgumentTypeError('output file name is required unless --idem is used')
 
   if args.proto == _gtirb:
     fdsetdata = zlib.decompress(base64.b64decode(GTIRB_FDSET))
@@ -117,9 +132,10 @@ def main():
   if not ProtoMessage:
     die(f"message type '{args.msgtype}' not found.")
 
-  prefix = args.input.read(args.seek)
-  data = args.input.read()
-  args.input.close()
+  with open(args.input, 'rb') as f:
+    prefix = f.read(args.seek)
+    data = f.read()
+
   message = None
   if args.fr == 'proto':
     try:
@@ -134,15 +150,9 @@ def main():
     message = google.protobuf.json_format.Parse(data, message)
 
   assert message
-  if args.output.fileno() not in (0, 1):  # not stdin or stdout
-    args.output.truncate(0)
-
-  if args.idem:
-    args.output.write(prefix)
 
   if args.to == 'proto':
     data = message.SerializeToString(deterministic=True)
-    args.output.write(data)
   elif args.to == 'json':
     # see: https://github.com/protocolbuffers/protobuf/blob/main/python/google/protobuf/json_format.py
     # and: https://protobuf.dev/programming-guides/proto3/#json
@@ -152,8 +162,12 @@ def main():
       preserving_proto_field_name=True
     )
 
-    data = json.dumps(msgdict, sort_keys=True, indent=2)
-    args.output.write(data.encode('utf-8'))
+    data = json.dumps(msgdict, sort_keys=True, indent=2).encode('utf-8')
+
+  with open(args.output, 'wb') as f:
+    if args.idem:
+      f.write(prefix)
+    f.write(data)
 
 
 if __name__ == '__main__':
