@@ -43,6 +43,8 @@ type content_block = {
   address : int; 
 }
 
+let decode_instr_success = ref 0
+let decode_instr_fail = ref 0
 
 (* CONSTANTS  *)
 let opcode_length = 4
@@ -91,13 +93,70 @@ let do_block ~(need_flip: bool) (b, c : content_block * CodeBlock.t): rectified_
   let address = b.address in
   let num_opcodes = c.size / opcode_length in
   if (size <> num_opcodes * opcode_length) then
-    failwith @@ "block size is not a multiple of opcode size: " ^ b64_of_uuid ruuid;
+    Printf.eprintf "block size is not a multiple of opcode size (size %d): %s\n" size (b64_of_uuid ruuid);
 
   let contents = Bytes.sub b.raw offset size in
   let opcodes = List.init num_opcodes (cut_op contents) in
 
   { size; offset; ruuid; contents; opcodes; address }
   
+
+
+module DisCache = Lru_cache.Make (struct
+  open! Core.Bytes
+  open Core
+  open! Lru_cache
+  type t = (string * int) [@@deriving compare, hash, sexp_of]
+      let invariant = ignore
+  end)
+
+let disas_cache : ((string list, dis_error) result) DisCache.t = DisCache.create ~max_size:10000 ()
+
+
+let env =
+  match Arm_env.aarch64_evaluation_environment () with
+  | Some e -> e
+  | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
+
+
+let to_asli_impl (opcode_be: string) (addr : int) : ((string list, dis_error) result) =
+  let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
+  let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
+  let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
+  let address = Some (string_of_int addr)                                      in
+
+  (* below, opnum is the numeric opcode (necessarily BE) and opcode_* are always LE. *)
+  (* TODO: change argument of to_asli to follow this convention. *)
+  let opnum = Int32.to_int String.(get_int32_be opcode_be 0)                    in
+  let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
+
+  let opcode_list : char list = List.(rev @@ of_seq @@ String.to_seq opcode_be) in
+  let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
+  let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
+
+  let do_dis () : ((string list * string list), dis_error) result =
+    (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
+    | res -> Ok (List.map p_raw res, List.map p_pretty res)
+    | exception exc ->
+      Printf.eprintf
+        "error during aslp disassembly (unsupported opcode %s, bytes %s):\n\nException : %s\n"
+        opnum_str opcode_str (Printexc.to_string exc);
+        (* Printexc.print_backtrace stderr; *)
+        Error {
+          opcode =  opnum_str;
+          error = (Printexc.to_string exc)
+        }
+    )
+  in Result.map fst (do_dis ())
+
+
+let cache = true
+
+let to_asli (opcode_be: string) (addr : int) : ((string list, dis_error) result) =
+  if cache then (
+  let k : (string * int) = (opcode_be, addr) in 
+  DisCache.find_or_add disas_cache k ~default:(fun () -> to_asli_impl opcode_be addr)
+  ) else (to_asli_impl opcode_be addr)
 
 let do_module (m: Module.t): Module.t = 
 
@@ -121,48 +180,12 @@ let do_module (m: Module.t): Module.t =
   let rblocks = List.map (do_block ~need_flip) cblocks in 
 
   Printexc.record_backtrace true;
-  let env =
-    match Arm_env.aarch64_evaluation_environment () with
-    | Some e -> e
-    | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
-  in
-
 
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (opcode_be: bytes) (addr : int) : ((string list, dis_error) result) =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
-    let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
-    let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
-    let address = Some (string_of_int addr)                                      in
-
-    (* below, opnum is the numeric opcode (necessarily BE) and opcode_* are always LE. *)
-    (* TODO: change argument of to_asli to follow this convention. *)
-    let opnum = Int32.to_int Bytes.(get_int32_be opcode_be 0)                    in
-    let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
-
-    let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
-    let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
-    let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
-
-    let do_dis () : ((string list * string list), dis_error) result =
-      (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
-      | res -> Ok (List.map p_raw res, List.map p_pretty res)
-      | exception exc ->
-        Printf.eprintf
-          "error during aslp disassembly (unsupported opcode %s, bytes %s):\n\nException : %s\n"
-          opnum_str opcode_str (Printexc.to_string exc);
-          (* Printexc.print_backtrace stderr; *)
-          Error {
-            opcode =  opnum_str;
-            error = (Printexc.to_string exc)
-          }
-      )
-    in Result.map fst (do_dis ())
-  in
   let rec asts opcodes addr =
     match opcodes with
     | []      -> []
-    | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length))
+    | h :: t  -> (to_asli (String.of_bytes h) addr) :: (asts t (addr + opcode_length))
   in
   (* let map' f l =
     if List.length blk_orded > 10000
@@ -247,12 +270,21 @@ let () =
         Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
       ) in
 
+  let bt = Sys.time() in
   let modules'    = List.map do_module ir.modules in
   let new_ir      = {ir with modules = modules'}  in
   let serial      = IR.to_proto new_ir            in
   let encoded     = Writer.contents serial        in
+  let et = Sys.time() in 
+  let time_delta = et -. bt in
 
   (* Reserialise to disk *)
   let out = open_out_bin !out_file in
-  output_string out encoded;
-  close_out out;
+    output_string out encoded;
+    close_out out;
+    Printf.printf "Decoded %d instructions in %f seconds (%d failure) (%f cache hit rate)\n"
+      !decode_instr_success time_delta !decode_instr_fail (DisCache.hit_rate disas_cache);
+
+    
+
+
