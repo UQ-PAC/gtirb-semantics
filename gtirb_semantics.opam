@@ -17,6 +17,9 @@ depends: [
   "ocaml-protoc-plugin" {>= "6.1.0"}
   "base64"
   "janestreet_lru_cache"
+  "lwt"
+  "lwt_ppx"
+  "mtime"
   "odoc" {with-doc}
 ]
 build: [
