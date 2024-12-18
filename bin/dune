@@ -1,7 +1,7 @@
 (executable
  (public_name gtirb_semantics)
  (name main)
- (flags (:standard -w -69))
+ (flags (:standard -w -69 -w -32 -w -27))
  (preprocess
   (pps ppx_jane -dont-apply=sexp_message))
- (libraries base64 yojson gtirb_semantics asli.libASL janestreet_lru_cache))
+ (libraries base64 yojson gtirb_semantics asli.libASL janestreet_lru_cache lwt.unix mtime mtime.clock))
