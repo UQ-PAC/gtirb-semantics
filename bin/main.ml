@@ -51,12 +51,12 @@ type content_block = {
 let opcode_length = 4
 let json_file = ref ""
 let serve = ref false
-let client = ref true
+let client = ref false
 let shutdown_server = ref false
 let speclist = [
   ("--json", Arg.Set_string json_file, "output json semantics to given file (default: none, use /dev/stderr for stderr)");
   ("--serve", Arg.Set serve, "Start server process (in foreground)"); 
-  ("--local", Arg.Clear client, "Do not use client to server"); 
+  ("--client", Arg.Set client, "Use client to server"); 
   ("--shutdown-server", Arg.Set shutdown_server, "Stop server process"); 
 ]
 let count_pos_args = ref (0)
