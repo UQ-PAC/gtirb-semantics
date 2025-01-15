@@ -18,7 +18,6 @@ depends: [
   "base64"
   "janestreet_lru_cache"
   "lwt"
-  "lwt_ppx"
   "mtime"
   "odoc" {with-doc}
 ]
@@ -37,3 +36,4 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/UQ-PAC/gtirb-semantics.git"
+pin-depends: ["asli.dev" "git+https://github.com/UQ-PAC/aslp.git"]
