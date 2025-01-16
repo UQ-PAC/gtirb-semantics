@@ -7,7 +7,8 @@ open Gtirb_semantics.Module.Gtirb.Proto
 open Gtirb_semantics.Section.Gtirb.Proto
 open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
-open LibASL
+open Aslp_common.Common
+
 
 module Result = OcamlResult
 
@@ -25,14 +26,6 @@ type rectified_block = {
   size      : int;
 }
 
-
-type dis_error = {
-  opcode: string;
-  error: string
-}
-
-
-type opcode_sem = ((string list, dis_error) result)
 
 (* ASLi semantic info for a block *)
 type ast_block = {
@@ -110,233 +103,6 @@ let do_block ~(need_flip: bool) (b, c : content_block * CodeBlock.t): rectified_
   
 let (let*) = Lwt.bind
 
-module Rpc = struct
-
-  let message_count = ref 0
-
-  let sockfpath = match (Sys.getenv_opt "GTIRB_SEM_SOCKET") with 
-      | Some x -> (x)
-      | None -> ("gtirb_semantics_socket")
-
-
-  let sockaddr = Lwt_unix.ADDR_UNIX sockfpath
-
-  type msg_call = 
-    | Shutdown 
-    | Lift of {addr: int; opcode_be: string}
-    | LiftAll of (string * int) list
-
-  type msg_resp = 
-    | Ok of opcode_sem
-    | All of opcode_sem list
-
-end
-
-
-module InsnLifter = struct 
-
-  module DisCache = Lru_cache.Make (struct
-    open! Core.Bytes
-    open Core
-    open! Lru_cache
-    type t = (string * int) [@@deriving compare, hash, sexp_of]
-        let invariant = ignore
-    end)
-
-
-  let disas_cache : ((string list, dis_error) result) DisCache.t = DisCache.create ~max_size:5000 ()
-
-  (* number of cache misses *)
-  let decode_instr_success = ref 0
-  (* number of serviced decode requests*)
-  let decode_instr_total = ref 0
-  (* number of errors *)
-  let decode_instr_fail = ref 0
-
-
-
-  let env = lazy begin
-    match Arm_env.aarch64_evaluation_environment () with
-    | Some e -> e
-    | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
-  end
-
-
-  let to_asli_impl (opcode_be: string) (addr : int) : ((string list, dis_error) result) =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim    in
-    let p_pretty a = Asl_utils.pp_stmt a |> String.trim                           in
-    let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                    in
-    let address = Some (string_of_int addr)                                       in
-
-    (* below, opnum is the numeric opcode (necessarily BE) and opcode_* are always LE. *)
-    (* TODO: change argument of to_asli to follow this convention. *)
-    let opnum = Int32.to_int String.(get_int32_be opcode_be 0)                    in
-    let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                 in
-
-    let opcode_list : char list = List.(rev @@ of_seq @@ String.to_seq opcode_be) in
-    let opcode_str = String.concat " " List.(map p_byte opcode_list)              in
-    let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
-
-    let do_dis () : ((string list * string list), dis_error) result =
-      (match Dis.retrieveDisassembly ?address (Lazy.force env) (Dis.build_env (Lazy.force env)) opnum_str with
-      | res -> 
-          decode_instr_success := !decode_instr_success + 1 ; 
-          Ok (List.map p_raw res, List.map p_pretty res)
-      | exception exc ->
-        Printf.eprintf
-          "error during aslp disassembly (unsupported opcode %s, bytes %s):\n\nException : %s\n"
-          opnum_str opcode_str (Printexc.to_string exc);
-          decode_instr_fail := !decode_instr_fail + 1 ; 
-          (* Printexc.print_backtrace stderr; *)
-          Error {
-            opcode =  opnum_str;
-            error = (Printexc.to_string exc)
-          }
-      )
-    in Result.map fst (do_dis ())
-
-  let to_asli ?(cache=true) (opcode_be: string) (addr : int) : ((string list, dis_error) result) =
-    if cache then (
-    let k : (string * int) = (opcode_be, addr) in 
-    DisCache.find_or_add disas_cache k ~default:(fun () -> to_asli_impl opcode_be addr)
-    ) else (to_asli_impl opcode_be addr)
-
-end
-
-
-module Server = struct 
-
-  let shutdown = ref false
-
-  let rec respond (ic: Lwt_io.input_channel)  (oc:Lwt_io.output_channel) : unit Lwt.t = 
-
-    let stop () = 
-      let* () = Lwt_io.close ic in
-      let* () = Lwt_io.close oc in
-      Lwt.return ()
-    in
-    if (Lwt_io.is_closed ic || Lwt_io.is_closed oc || !shutdown) 
-    then stop ()
-    else 
-      let* r: Rpc.msg_call = Lwt.catch (fun () -> Lwt_io.read_value ic) (function
-      | exn -> 
-          let* () = stop () in
-          Lwt.fail exn 
-      )
-      in
-      Rpc.message_count := !Rpc.message_count + 1 ;
-      let* () = match r with
-        | Shutdown ->
-          shutdown := true ;
-          stop () 
-        | Lift {addr; opcode_be} ->  
-          let lifted : opcode_sem = InsnLifter.to_asli opcode_be addr  in
-          let resp : Rpc.msg_resp = Ok lifted in
-          Lwt_io.write_value oc resp
-        | LiftAll (ops) -> 
-          let lifted = List.map (fun (op, addr) -> InsnLifter.to_asli op addr) ops in
-          let resp : Rpc.msg_resp = All lifted in
-          Lwt_io.write_value oc resp
-      in 
-      respond ic oc
-
-  and handle_conn (addr: Lwt_unix.sockaddr) ((ic: Lwt_io.input_channel) , (oc:Lwt_io.output_channel)) = 
-    Lwt.catch (fun () -> respond ic oc) (function 
-      | End_of_file -> (let* () = Lwt_io.close ic in let* () = Lwt_io.close oc; in Lwt.return ())
-      | x -> Lwt_io.printf "%s" (Printexc.to_string x)
-      )
-
-
-  let server = lazy (Lwt_io.establish_server_with_client_address Rpc.sockaddr handle_conn)
-
-
-  let rec run_server () = 
-    if !shutdown 
-    then 
-      Lwt.return () 
-    else 
-      let* () = Lwt_io.printf "Decoded %d instructions  (%d failure) (%f cache hit rate) (%d messages)\n"
-      !InsnLifter.decode_instr_success !InsnLifter.decode_instr_fail (InsnLifter.DisCache.hit_rate InsnLifter.disas_cache) !Rpc.message_count
-      in
-      let* () = Lwt_unix.sleep 5.0 in
-      run_server ()
-
-  let start_server () = 
-    let start = 
-      let* _ = Lwt.return (
-        let* r  = Lwt.return (Lazy.force InsnLifter.env) in
-        let* m = Lwt.return ((Mtime.Span.to_float_ns (Mtime_clock.elapsed ())) /. 1000000000.0) in
-        Lwt_io.printf "Initialiesd lifter environment in %f seconds\n" m
-        ) in
-      let* s = Lazy.force server in
-      let* _ = Lwt_io.printf "Serving on domain socket GTIRB_SEM_SOCKET=%s\n" Rpc.sockfpath in
-
-      Lwt_unix.on_signal
-      Sys.sigint
-        (fun _ ->  exit 0)
-      |> ignore;
-
-      Lwt_main.at_exit (fun () -> begin
-      print_endline "shutdown server" ;
-        (Lwt_io.shutdown_server s)
-      end
-      );
-      (run_server ())
-    in Lwt_main.run start
-
-end
-
-module Client = struct
-  open Lwt
-
-  let connection = lazy ( Lwt_io.open_connection Rpc.sockaddr )
-
-  let cin () = let* (ic,oc) = Lazy.force connection in 
-      if (Lwt_io.is_closed ic) then (failwith "connection (in) closed") ;
-      return ic
-  let cout () = let* (ic,oc) = Lazy.force connection in 
-      if (Lwt_io.is_closed oc) then (failwith "connection (out) closed") ;
-      return oc
-
-  let shutdown_server () = 
-    let* cout = cout () in
-    let m : Rpc.msg_call = Shutdown in
-    Lwt_io.write_value cout m
-
-  let lift (opcode_be: string) (addr : int) = 
-    let* cout = cout()  in
-    let* cin = cin() in
-    let cm : Rpc.msg_call = Lift {opcode_be; addr} in
-    let*() = Lwt_io.write_value cout cm in
-    let* resp : Rpc.msg_resp = Lwt_io.read_value cin  in
-    match resp with 
-      | Ok x -> return x
-      | All x -> Lwt.fail_with "did not expect multi response"
-
-  let lift_one (opcode_be: string) (addr : int) = 
-    Lwt_main.run (lift opcode_be addr)
-
-  let lift_multi (opcodes: (string * int) list) : opcode_sem list Lwt.t = 
-    let* lift_m = 
-      let* cout = cout() in let* cin = cin() in
-      let cm : Rpc.msg_call = LiftAll opcodes in
-      let*() = Lwt_io.write_value cout cm in
-      let* resp : Rpc.msg_resp = Lwt_io.read_value cin  in
-      match resp with 
-        | All x -> return x
-        | Ok x -> return [x]
-      in 
-    let* _ = Lwt_list.iter_s (function 
-      | Ok x -> InsnLifter.decode_instr_success := !InsnLifter.decode_instr_success + 1; Lwt.return () ;
-      | Error ({opcode; error}) -> (
-        InsnLifter.decode_instr_fail := !InsnLifter.decode_instr_fail + 1; 
-        Lwt_io.printf "Lift error : %s :: %s\n"  opcode error;
-      )
-      ) lift_m
-    in
-    return lift_m
-end
-
 let do_module (m: Module.t): Module.t Lwt.t = 
 
   let all_sects = m.sections in
@@ -366,12 +132,12 @@ let do_module (m: Module.t): Module.t Lwt.t =
     | []      -> []
     | h :: t  -> ((String.of_bytes h), addr) :: (ops t (addr + opcode_length))
   in
-  let asts opcodes addr = if (!client) then (Client.lift_multi (ops opcodes addr))
+  let asts opcodes addr = if (!client) then (Client.lift_multi ~opcodes:(ops opcodes addr))
   else begin
     let rec getasts opcodes addr =
       match opcodes with
       | []      -> []
-      | h :: t  -> (InsnLifter.to_asli (String.of_bytes h) addr) :: (getasts t (addr + opcode_length))
+      | h :: t  -> (Server.lift_opcode ~opcode_be:(String.of_bytes h) addr) :: (getasts t (addr + opcode_length))
     in Lwt.return @@ getasts opcodes addr
   end
   in
@@ -468,8 +234,10 @@ let gtirb_to_gts () : unit =
     let et = Sys.time () in
     let usr_time_delta = et -. bt in
     let time_delta = Float.div (Mtime.Span.to_float_ns (Mtime_clock.elapsed ())) (1000000000.0) in
-    Printf.printf "Lifted %d instructions in %f sec (%f user time) (%d failure) (%f cache hit rate)\n"
-      !InsnLifter.decode_instr_success time_delta usr_time_delta !InsnLifter.decode_instr_fail (InsnLifter.DisCache.hit_rate InsnLifter.disas_cache)
+    if (not !client) then 
+      let stats = Server.get_local_lifter_stats () in
+      Printf.printf "Lifted %d instructions in %f sec (%f user time) (%d failure) (%f cache hit rate)\n"
+      stats.success time_delta usr_time_delta (stats.fail) (stats.cache_hit_rate)
 
 
 (*  MAIN  *)

@@ -2,6 +2,8 @@
  (public_name gtirb_semantics)
  (name main)
  (flags (:standard -w -69 -w -32 -w -27 -w -26))
- (preprocess
-  (pps ppx_jane -dont-apply=sexp_message))
- (libraries base64 yojson gtirb_semantics asli.libASL janestreet_lru_cache lwt.unix mtime mtime.clock))
+ (libraries base64 yojson gtirb_semantics asli.libASL 
+            aslp_client_server_ocaml.aslp_common 
+            aslp_client_server_ocaml.aslp_client 
+            aslp_client_server_ocaml.aslp_server
+            lwt.unix mtime mtime.clock))

@@ -1,1 +1,4 @@
-pin-depends: ["asli.dev" "git+https://github.com/UQ-PAC/aslp.git"]
+pin-depends: [
+  ["asli.dev" "git+https://github.com/UQ-PAC/aslp.git"]
+  ["aslp_client_server_ocaml.dev" "git+https://github.com/UQ-PAC/aslp-rpc.git#marshall-rpc-clientserver"]
+]
