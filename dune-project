@@ -19,7 +19,7 @@
  (name gtirb_semantics)
  (synopsis "Add semantic information to the IR of a disassembled ARM64 binary")
  (description "A longer description")
- (depends ocaml dune yojson asli (ocaml-protoc-plugin (>= 6.1.0)) base64 janestreet_lru_cache lwt mtime)
+ (depends ocaml dune yojson asli (ocaml-protoc-plugin (>= 6.1.0)) base64 aslp_client_server_ocaml lwt mtime)
  (tags
   (decompilers instruction-lifters static-analysis)))
 

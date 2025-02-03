@@ -16,7 +16,7 @@ depends: [
   "asli"
   "ocaml-protoc-plugin" {>= "6.1.0"}
   "base64"
-  "janestreet_lru_cache"
+  "aslp_client_server_ocaml"
   "lwt"
   "mtime"
   "odoc" {with-doc}
@@ -38,5 +38,5 @@ build: [
 dev-repo: "git+https://github.com/UQ-PAC/gtirb-semantics.git"
 pin-depends: [
   ["asli.dev" "git+https://github.com/UQ-PAC/aslp.git"]
-  ["aslp_client_server_ocaml.dev" "git+https://github.com/UQ-PAC/aslp-rpc.git#marshall-rpc-clientserver"]
+  ["aslp_client_server_ocaml.dev" "git+https://github.com/UQ-PAC/aslp-rpc.git"]
 ]
