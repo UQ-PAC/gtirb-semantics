@@ -137,7 +137,7 @@ let do_module (m: Module.t): Module.t Lwt.t =
     let rec getasts opcodes addr =
       match opcodes with
       | []      -> []
-      | h :: t  -> (Server.lift_opcode ~opcode_be:(String.of_bytes h) addr) :: (getasts t (addr + opcode_length))
+      | h :: t  -> (Server.lift_opcode ~cache:true ~opcode_be:(String.of_bytes h) addr) :: (getasts t (addr + opcode_length))
     in Lwt.return @@ getasts opcodes addr
   end
   in
@@ -163,7 +163,9 @@ let do_module (m: Module.t): Module.t Lwt.t =
     let jsoned (asts: (string list, dis_error) result list) : Yojson.Safe.t =
       let toj (x: (string list, dis_error) result) : Yojson.Safe.t = match x with
         | Ok sl -> to_list @@ List.map to_string sl
-        | Error err -> `Assoc [
+        | Error err -> 
+          Printf.eprintf "Decode error on op %s: %s\n" err.opcode err.error ;
+          `Assoc [
           ("decode_error", `Assoc [("opcode", (`String err.opcode)); ("error", `String err.error)] )
         ]
       in
