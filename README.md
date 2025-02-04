@@ -18,22 +18,19 @@ Through the nix package
 
 Through opam
 
-1. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies) if it is not already pinned
+1. (First time only) Set up [opam repository](https://github.com/ailrst/opam-repository)
 
 ```sh
-opam pin asli git+https://github.com/UQ-PAC/aslp
-```
-2. (First time only) Add [opam repository](https://github.com/ailrst/opam-repository): 
-
-```sh
-opam repository add pac https://github.com/ailrst/opam-repository
+opam repository add pac https://github.com/ailrst/opam-repository.git
 ```
 
-3. `opam install gtirb_semantics`
+2. `opam install gtirb_semantics`
 
 ### For development
 
-1. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies) if it is not already pinned
+1. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies)
+
+(Through opam repository or opam pin)
 
 ```shell
 opam pin asli git+https://github.com/UQ-PAC/aslp
