@@ -6,17 +6,50 @@ This codebase serves to tie several verification tools together.
 The [GTIRB](https://github.com/grammatech/gtirb) intermediate representation produced by the [Datalog Disassembler](https://github.com/GrammaTech/ddisasm) is deserialised using [Google Protocol Buffers](https://developers.google.com/protocol-buffers). This is then dismantled and the [ASLi ASL Interpreter](https://github.com/UQ-PAC/asl-interpreter) is used to add instruction semantics for each instruction opcode. These are then reserialised back into the original IR protobufs alongside the original data produced by DDisasm (.gts file).
 The semantic information itself is also printed to stdout.
 
-## Requirements
-To build and run this, you will need:
-* ASLp &mdash;
-  following [its readme](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies),
-  install dependencies then follow the steps for use in other projects.
-* ddisasm &mdash; installing via [the Nix package](https://github.com/katrinafyi/pac-nix) is recommended.
-* protoc &mdash; installed by the system package manager.
-* various OCaml libraries &mdash; install these with `opam install --deps-only ./*.opam`
-* Scala / SBT (optional) &mdash; only needed for the "retrieve" tool, install with [Coursier](https://get-coursier.io/docs/cli-installation) (see also: [BASIL docs](https://github.com/UQ-PAC/BASIL/tree/main/docs/development)).
+## Installation
 
-As a reference for these steps on Ubuntu 20.04, you may see `scripts/build-all.sh` (however, using this script directly is not advised).
+
+### For use
+
+Through the nix package 
+
+1. (First time only) setup nix repo [nix package](https://github.com/katrinafyi/pac-nix)
+2. `nix profile install github:katrinafyi/pac-nix#gtirb-semantics`
+
+Through opam
+
+1. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies) if it is not already pinned
+
+```sh
+opam pin asli git+https://github.com/UQ-PAC/aslp
+```
+2. (First time only) Add [opam repository](https://github.com/ailrst/opam-repository): 
+
+```sh
+opam repository add pac https://github.com/ailrst/opam-repository
+```
+
+3. `opam install gtirb_semantics`
+
+### For development
+
+1. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies) if it is not already pinned
+
+```shell
+opam pin asli git+https://github.com/UQ-PAC/aslp
+```
+
+2. Clone and install
+
+```
+git clone git@github.com:UQ-PAC/gtirb-semantics.git && cd gtirb-semantics
+opam install --deps-only .
+dune build  --profile=release
+dune install
+```
+
+- If the build fails finding `protoc`, it can be installed through the system package manager.
+- Lift binaries with `ddisasm` ([install using nix](https://github.com/katrinafyi/pac-nix?tab=readme-ov-file))
 
 ## Usage
 
