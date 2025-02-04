@@ -13,7 +13,7 @@
 
 (license Apache-2.0)
 
- (homepage https://github.com/UQ-PAC/gtirb-semantics)
+(homepage https://github.com/UQ-PAC/gtirb-semantics)
 
 (package
  (name gtirb_semantics)

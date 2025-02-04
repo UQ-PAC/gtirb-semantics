@@ -9,18 +9,26 @@ The semantic information itself is also printed to stdout.
 ## Installation
 
 
-### For user
+### For use
 
 Through the nix package 
 
 1. (First time only) setup nix repo [nix package](https://github.com/katrinafyi/pac-nix)
-2. `nix profile install nix profile install github:katrinafyi/pac-nix#gtirb-semantics`
+2. `nix profile install github:katrinafyi/pac-nix#gtirb-semantics`
 
 Through opam
 
-1. (First time only) Add [opam repository](https://github.com/ailrst/opam-repository): 
-  `opam repository add pac https://github.com/ailrst/opam-repository`
-2. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies)
+1. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies) if it is not already pinned
+
+```sh
+opam pin asli git+https://github.com/UQ-PAC/aslp
+```
+2. (First time only) Add [opam repository](https://github.com/ailrst/opam-repository): 
+
+```sh
+opam repository add pac https://github.com/ailrst/opam-repository
+```
+
 3. `opam install gtirb_semantics`
 
 ### For development
@@ -40,8 +48,8 @@ dune build  --profile=release
 dune install
 ```
 
-- If this fails finding `protoc`: it can be installed through the system package manager.
-- Lift binaries with ddisasm ([install using nix](https://github.com/katrinafyi/pac-nix?tab=readme-ov-file))
+- If the build fails finding `protoc`, it can be installed through the system package manager.
+- Lift binaries with `ddisasm` ([install using nix](https://github.com/katrinafyi/pac-nix?tab=readme-ov-file))
 
 ## Usage
 
