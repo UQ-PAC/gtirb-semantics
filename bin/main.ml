@@ -9,7 +9,6 @@ open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
 open Aslp_common.Common
 
-
 module Result = OcamlResult
 
 (* TYPES  *)
@@ -45,11 +44,13 @@ let opcode_length = 4
 let json_file = ref ""
 let serve = ref false
 let client = ref false
+let offline = ref false
 let shutdown_server = ref false
 let speclist = [
   ("--json", Arg.Set_string json_file, "output json semantics to given file (default: none, use /dev/stderr for stderr)");
   ("--serve", Arg.Set serve, "Start server process (in foreground)"); 
   ("--client", Arg.Set client, "Use client to server"); 
+  ("--offline", Arg.Set offline, "Use offline lifter (implies --local)"); 
   ("--shutdown-server", Arg.Set shutdown_server, "Stop server process"); 
 ]
 let count_pos_args = ref (0)
@@ -65,6 +66,10 @@ let handle_rest_arg arg =
 let usage_string  = "[options] [input.gtirb output.gts]"
 let usage_message = Printf.sprintf "usage: %s %s\n" Sys.argv.(0) usage_string
 
+let mode () = match (!client, !offline) with
+    | _, true -> `LocalOffline
+    | true, false -> `Client
+    | false, false -> `LocalOnline
 
 (* ASL specifications are from the bundled ARM semantics in libASL. *)
 
@@ -127,19 +132,29 @@ let do_module (m: Module.t): Module.t Lwt.t =
 
   (* Evaluate each instruction one by one with a new environment for each *)
 
+  let rec lift_online_local (opcodes : bytes list) (addr : int) =
+    match opcodes with
+    | []      -> []
+    | h :: t  -> (Server.lift_opcode ~cache:true ~opcode_be:(String.of_bytes h) addr) :: (lift_online_local t (addr + opcode_length))
+  in 
+
+  let lift_offline_local (opcodes:bytes list) (addr: int) = 
+    let lift_one_offline (op: bytes) (addr: int) = 
+      Server.lift_opcode_offline_lifter ~opcode_be:(String.of_bytes op) addr
+    in
+    let with_addrs = List.mapi (fun i op -> (op, addr + (i * opcode_length))) opcodes in
+    let res = List.map (fun (opcode,addr) -> lift_one_offline opcode addr) with_addrs in
+    res
+  in
   let rec ops opcodes addr =
     match opcodes with
     | []      -> []
     | h :: t  -> ((String.of_bytes h), addr) :: (ops t (addr + opcode_length))
   in
-  let asts opcodes addr = if (!client) then (Client.lift_multi ~opcodes:(ops opcodes addr))
-  else begin
-    let rec getasts opcodes addr =
-      match opcodes with
-      | []      -> []
-      | h :: t  -> (Server.lift_opcode ~cache:true ~opcode_be:(String.of_bytes h) addr) :: (getasts t (addr + opcode_length))
-    in Lwt.return @@ getasts opcodes addr
-  end
+  let asts opcodes addr = match (mode()) with 
+    | `Client -> (Client.lift_multi ~opcodes:(ops opcodes addr))
+    | `LocalOnline -> Lwt.return @@ lift_online_local opcodes addr
+    | `LocalOffline -> Lwt.return @@ lift_offline_local opcodes addr
   in
 
   (*
@@ -164,7 +179,9 @@ let do_module (m: Module.t): Module.t Lwt.t =
       let toj (x: (string list, dis_error) result) : Yojson.Safe.t = match x with
         | Ok sl -> to_list @@ List.map to_string sl
         | Error err -> 
-          Printf.eprintf "Decode error on op %s: %s\n" err.opcode err.error ;
+          (match mode () with 
+          | `Client -> Printf.eprintf "Decode error on op %s: %s\n" err.opcode err.error
+          | _ -> ());
           `Assoc [
           ("decode_error", `Assoc [("opcode", (`String err.opcode)); ("error", `String err.error)] )
         ]
@@ -238,7 +255,8 @@ let gtirb_to_gts () : unit =
     let time_delta = Float.div (Mtime.Span.to_float_ns (Mtime_clock.elapsed ())) (1000000000.0) in
     if (not !client) then 
       let stats = Server.get_local_lifter_stats () in
-      Printf.printf "Lifted %d instructions in %f sec (%f user time) (%d failure) (%f cache hit rate)\n"
+      let oc = if (stats.fail > 0) then stderr else stdout in
+      Printf.fprintf oc "Lifted %d instructions in %f sec (%f user time) (%d failure) (%f cache hit rate)\n"
       stats.success time_delta usr_time_delta (stats.fail) (stats.cache_hit_rate)
 
 
