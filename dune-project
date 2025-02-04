@@ -11,14 +11,13 @@
 
 (maintainers "UQ-PAC")
 
-(license LICENSE)
+(license Apache-2.0)
 
-(documentation https://github.com/UQ-PAC/gtirb-semantics)
+ (homepage https://github.com/UQ-PAC/gtirb-semantics)
 
 (package
  (name gtirb_semantics)
  (synopsis "Add semantic information to the IR of a disassembled ARM64 binary")
- (description "A longer description")
  (depends ocaml dune yojson asli (ocaml-protoc-plugin (>= 6.1.0)) base64 aslp_client_server_ocaml lwt mtime)
  (tags
   (decompilers instruction-lifters static-analysis)))
