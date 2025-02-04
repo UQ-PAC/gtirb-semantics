@@ -16,6 +16,9 @@ depends: [
   "asli"
   "ocaml-protoc-plugin" {>= "6.1.0"}
   "base64"
+  "aslp_client_server_ocaml"
+  "lwt"
+  "mtime"
   "odoc" {with-doc}
 ]
 build: [
@@ -33,3 +36,6 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/UQ-PAC/gtirb-semantics.git"
+pin-depends: [
+  ["asli.dev" "git+https://github.com/UQ-PAC/aslp.git"]
+]

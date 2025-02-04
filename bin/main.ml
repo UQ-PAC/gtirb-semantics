@@ -7,12 +7,14 @@ open Gtirb_semantics.Module.Gtirb.Proto
 open Gtirb_semantics.Section.Gtirb.Proto
 open Gtirb_semantics.CodeBlock.Gtirb.Proto
 open Gtirb_semantics.AuxData.Gtirb.Proto
-open LibASL
+open Aslp_common.Common
+
 
 module Result = OcamlResult
 
 (* TYPES  *)
 
+let () = Printexc.record_backtrace true
 (* These could probably be simplified *)
 (* OCaml representation of mid-evaluation code block  *)
 type rectified_block = {
@@ -25,15 +27,10 @@ type rectified_block = {
 }
 
 
-type dis_error = {
-  opcode: string;
-  error: string
-}
-
 (* ASLi semantic info for a block *)
 type ast_block = {
   auuid   : bytes;
-  asts    : ((string list, dis_error) result) list;
+  asts    : opcode_sem list;
 }
 
 (* Wrapper for polymorphic code/data/not-set block pre-rectification  *)
@@ -43,12 +40,17 @@ type content_block = {
   address : int; 
 }
 
-
 (* CONSTANTS  *)
 let opcode_length = 4
 let json_file = ref ""
+let serve = ref false
+let client = ref false
+let shutdown_server = ref false
 let speclist = [
   ("--json", Arg.Set_string json_file, "output json semantics to given file (default: none, use /dev/stderr for stderr)");
+  ("--serve", Arg.Set serve, "Start server process (in foreground)"); 
+  ("--client", Arg.Set client, "Use client to server"); 
+  ("--shutdown-server", Arg.Set shutdown_server, "Stop server process"); 
 ]
 let count_pos_args = ref (0)
 let in_file = ref "/nowhere/input"
@@ -60,9 +62,10 @@ let handle_rest_arg arg =
   | 2 -> out_file := arg
   | _ -> ()
 
+let usage_string  = "[options] [input.gtirb output.gts]"
+let usage_message = Printf.sprintf "usage: %s %s\n" Sys.argv.(0) usage_string
 
-let usage_string  = "GTIRB_FILE OUTPUT_FILE [--json JSON_SEMANTICS_OUTPUT]"
-let usage_message = Printf.sprintf "usage: %s [--help] %s\n" Sys.argv.(0) usage_string
+
 (* ASL specifications are from the bundled ARM semantics in libASL. *)
 
 (* Protobuf spelunking  *)
@@ -91,15 +94,16 @@ let do_block ~(need_flip: bool) (b, c : content_block * CodeBlock.t): rectified_
   let address = b.address in
   let num_opcodes = c.size / opcode_length in
   if (size <> num_opcodes * opcode_length) then
-    failwith @@ "block size is not a multiple of opcode size: " ^ b64_of_uuid ruuid;
+    Printf.eprintf "block size is not a multiple of opcode size (size %d): %s\n" size (b64_of_uuid ruuid);
 
   let contents = Bytes.sub b.raw offset size in
   let opcodes = List.init num_opcodes (cut_op contents) in
 
   { size; offset; ruuid; contents; opcodes; address }
   
+let (let*) = Lwt.bind
 
-let do_module (m: Module.t): Module.t = 
+let do_module (m: Module.t): Module.t Lwt.t = 
 
   let all_sects = m.sections in
   let intervals = List.flatten @@ List.map (fun (s : Section.t) -> s.byte_intervals) all_sects in
@@ -120,57 +124,34 @@ let do_module (m: Module.t): Module.t =
   let need_flip = m.byte_order = ByteOrder.LittleEndian in
   let rblocks = List.map (do_block ~need_flip) cblocks in 
 
-  Printexc.record_backtrace true;
-  let env =
-    match Arm_env.aarch64_evaluation_environment () with
-    | Some e -> e
-    | None -> Printf.eprintf "unable to load bundled asl files. has aslp been installed correctly?"; exit 1
-  in
-
 
   (* Evaluate each instruction one by one with a new environment for each *)
-  let to_asli (opcode_be: bytes) (addr : int) : ((string list, dis_error) result) =
-    let p_raw a = Utils.to_string (Asl_parser_pp.pp_raw_stmt a) |> String.trim   in
-    let p_pretty a = Asl_utils.pp_stmt a |> String.trim                          in
-    let p_byte (b: char) = Printf.sprintf "%02X" (Char.code b)                   in
-    let address = Some (string_of_int addr)                                      in
 
-    (* below, opnum is the numeric opcode (necessarily BE) and opcode_* are always LE. *)
-    (* TODO: change argument of to_asli to follow this convention. *)
-    let opnum = Int32.to_int Bytes.(get_int32_be opcode_be 0)                    in
-    let opnum_str = Printf.sprintf "0x%08lx" Int32.(of_int opnum)                in
-
-    let opcode_list : char list = List.(rev @@ of_seq @@ Bytes.to_seq opcode_be) in
-    let opcode_str = String.concat " " List.(map p_byte opcode_list)             in
-    let _opcode : bytes = Bytes.of_seq List.(to_seq opcode_list)                  in
-
-    let do_dis () : ((string list * string list), dis_error) result =
-      (match Dis.retrieveDisassembly ?address env (Dis.build_env env) opnum_str with
-      | res -> Ok (List.map p_raw res, List.map p_pretty res)
-      | exception exc ->
-        Printf.eprintf
-          "error during aslp disassembly (unsupported opcode %s, bytes %s):\n\nException : %s\n"
-          opnum_str opcode_str (Printexc.to_string exc);
-          (* Printexc.print_backtrace stderr; *)
-          Error {
-            opcode =  opnum_str;
-            error = (Printexc.to_string exc)
-          }
-      )
-    in Result.map fst (do_dis ())
-  in
-  let rec asts opcodes addr =
+  let rec ops opcodes addr =
     match opcodes with
     | []      -> []
-    | h :: t  -> (to_asli h addr) :: (asts t (addr + opcode_length))
+    | h :: t  -> ((String.of_bytes h), addr) :: (ops t (addr + opcode_length))
   in
-  (* let map' f l =
+  let asts opcodes addr = if (!client) then (Client.lift_multi ~opcodes:(ops opcodes addr))
+  else begin
+    let rec getasts opcodes addr =
+      match opcodes with
+      | []      -> []
+      | h :: t  -> (Server.lift_opcode ~cache:true ~opcode_be:(String.of_bytes h) addr) :: (getasts t (addr + opcode_length))
+    in Lwt.return @@ getasts opcodes addr
+  end
+  in
+
+  (*
+   let map' f l =
     if List.length blk_orded > 10000
       then Parmap.parmap ~ncores:2 f Parmap.(L l)
       else map f l in *)
-  let with_asts = List.map (fun b -> {
+  let* with_asts = Lwt_list.map_p (fun b -> 
+    let* asts = asts b.opcodes b.address in
+    Lwt.return {
       auuid   = b.ruuid;
-      asts    = asts b.opcodes b.address;
+      asts    = asts; 
     }) rblocks
   in
 
@@ -182,7 +163,9 @@ let do_module (m: Module.t): Module.t =
     let jsoned (asts: (string list, dis_error) result list) : Yojson.Safe.t =
       let toj (x: (string list, dis_error) result) : Yojson.Safe.t = match x with
         | Ok sl -> to_list @@ List.map to_string sl
-        | Error err -> `Assoc [
+        | Error err -> 
+          Printf.eprintf "Decode error on op %s: %s\n" err.opcode err.error ;
+          `Assoc [
           ("decode_error", `Assoc [("opcode", (`String err.opcode)); ("error", `String err.error)] )
         ]
       in
@@ -212,17 +195,11 @@ let do_module (m: Module.t): Module.t =
   let new_aux      = ast_aux serialisable in
   let full_auxes   = (aux_key, Some new_aux) :: orig_auxes in
   let mod_fixed    = {m with aux_data = full_auxes} in
-  mod_fixed
+  Lwt.return mod_fixed
 
 
-(*  MAIN  *)
-let () =
-  (* BEGINNING *)
-  Arg.parse speclist handle_rest_arg usage_message;
-  (* Printf.eprintf "gtirb-semantics: %s -> %s\n" !in_file !out_file; *)
-  if !count_pos_args <> 2 then
-    (output_string stderr usage_message; exit 1);
-
+let gtirb_to_gts () : unit = 
+  let bt = Sys.time() in
   (* Read bytes from the file, skip first 8 *) 
   let bytes = 
     let ic  = open_in_bin !in_file              in 
@@ -247,12 +224,42 @@ let () =
         Printf.sprintf "%s%s" "Could not reply request: " (Ocaml_protoc_plugin.Result.show_error e)
       ) in
 
-  let modules'    = List.map do_module ir.modules in
+  let modules'    = Lwt_main.run @@ Lwt_list.map_p do_module ir.modules in
   let new_ir      = {ir with modules = modules'}  in
   let serial      = IR.to_proto new_ir            in
   let encoded     = Writer.contents serial        in
 
   (* Reserialise to disk *)
   let out = open_out_bin !out_file in
-  output_string out encoded;
-  close_out out;
+    output_string out encoded;
+    close_out out;
+    let et = Sys.time () in
+    let usr_time_delta = et -. bt in
+    let time_delta = Float.div (Mtime.Span.to_float_ns (Mtime_clock.elapsed ())) (1000000000.0) in
+    if (not !client) then 
+      let stats = Server.get_local_lifter_stats () in
+      Printf.printf "Lifted %d instructions in %f sec (%f user time) (%d failure) (%f cache hit rate)\n"
+      stats.success time_delta usr_time_delta (stats.fail) (stats.cache_hit_rate)
+
+
+(*  MAIN  *)
+let () =
+  (* BEGINNING *)
+  Arg.parse speclist handle_rest_arg usage_message;
+  (* Printf.eprintf "gtirb-semantics: %s -> %s\n" !in_file !out_file; *)
+  if (not !serve) && (not !shutdown_server) && !count_pos_args <> 2 then
+    (output_string stderr usage_message; exit 1);
+
+  if (!shutdown_server) then begin
+    Lwt_main.run @@ Client.shutdown_server ()
+  end
+  else 
+  if (!serve) then begin
+    Server.start_server ()
+  end else begin
+    output_string stdout "Lifting\n" ;
+    gtirb_to_gts ()
+  end
+
+
+

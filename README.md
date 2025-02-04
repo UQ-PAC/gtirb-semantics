@@ -19,8 +19,32 @@ To build and run this, you will need:
 As a reference for these steps on Ubuntu 20.04, you may see `scripts/build-all.sh` (however, using this script directly is not advised).
 
 ## Usage
+
+To save on the initialisation time (2s which can dominate execution time when lifting many programs)
+and keep the in-memory instruction cache warm, it is possible to use `gtirb_semantics` as a
+client-server. 
+
+For example:
+
 ```
-dune exec gtirb_semantics [INPUT GTIRB FILE] [OUTPUT GTS FILE]
+gtirb_semantics --serve & > /dev/null
+gtirb_semantics --client input.gtirb output.gts
+gtirb_semantics --client input2.gtirb output2.gts
+gtirb_semantics --stop-server
+```
+The client and server communicate via domain socket which can be specified by setting the
+`GTIRB_SEM_SOCKET` environment variable.
+
+Full usage description:
+
+```
+usage: gtirb_semantics [options] [input.gtirb output.gts]
+
+  --json output json semantics to given file (default: none, use /dev/stderr for stderr)
+  --serve Start server process (in foreground)
+  --client Use client to server
+  --shutdown-server Stop server process
+  --help  Display this list of options
 ```
 
 GTIRB files can be obtained with:
