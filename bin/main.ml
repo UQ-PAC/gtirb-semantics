@@ -142,13 +142,13 @@ let do_module (m : Module.t) : Module.t Lwt.t =
     match opcodes with
     | [] -> []
     | h :: t ->
-        Server.lift_opcode ~cache:true ~opcode_be:(String.of_bytes h) addr
+        Server.(lift_opcode ~cache:true ~opcode:(Opcode.of_be_bytes (String.of_bytes h))) addr
         :: lift_online_local t (addr + opcode_length)
   in
 
   let lift_offline_local (opcodes : bytes list) (addr : int) =
     let lift_one_offline (op : bytes) (addr : int) =
-      Server.lift_opcode_offline_lifter ~opcode_le:(String.of_bytes op) addr
+      Server.(lift_opcode_offline_lifter ~opcode:(Opcode.of_be_bytes (String.of_bytes op))) addr
     in
     let with_addrs =
       List.mapi (fun i op -> (op, addr + (i * opcode_length))) opcodes
@@ -290,7 +290,7 @@ let gtirb_to_gts () : unit =
     let stats = Server.get_local_lifter_stats () in
     let oc = if stats.fail > 0 then stderr else stdout in
     Printf.fprintf oc
-      "Lifted %d instructions in %f sec (%f user time) (%d failure) (%f cache \
+      "Successfully lifted %d instructions in %f sec (%f user time) (%d failure) (%f cache \
        hit rate)\n"
       stats.success time_delta usr_time_delta stats.fail stats.cache_hit_rate
 
