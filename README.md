@@ -40,6 +40,12 @@ gtirb-semantics can be installed through a Nix package or through our custom opa
    dune install
    ```
 
+3. To run the locally-built gtirb-semantics, you can use:
+
+   ```bash
+   dune exec gtirb_semantics -- ARGS
+   ```
+
 - If the build fails finding `protoc`, it can be installed through the system package manager.
 - Lift binaries with `ddisasm` ([install using nix](https://github.com/katrinafyi/pac-nix?tab=readme-ov-file))
 
@@ -68,6 +74,7 @@ usage: gtirb_semantics [options] [input.gtirb output.gts]
   --json output json semantics to given file (default: none, use /dev/stderr for stderr)
   --serve Start server process (in foreground)
   --client Use client to server
+  --offline Use offline lifter (implies --local)
   --shutdown-server Stop server process
   --help  Display this list of options
 ```
