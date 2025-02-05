@@ -1,3 +1,0 @@
-pin-depends: [
-  ["asli.dev" "git+https://github.com/UQ-PAC/aslp.git"]
-]
