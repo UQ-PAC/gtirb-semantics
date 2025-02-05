@@ -6,44 +6,39 @@ This codebase serves to tie several verification tools together.
 The [GTIRB](https://github.com/grammatech/gtirb) intermediate representation produced by the [Datalog Disassembler](https://github.com/GrammaTech/ddisasm) is deserialised using [Google Protocol Buffers](https://developers.google.com/protocol-buffers). This is then dismantled and the [ASLi ASL Interpreter](https://github.com/UQ-PAC/asl-interpreter) is used to add instruction semantics for each instruction opcode. These are then reserialised back into the original IR protobufs alongside the original data produced by DDisasm (.gts file).
 The semantic information itself is also printed to stdout.
 
-## Installation
+## Installing for use
 
+gtirb-semantics can be installed through a Nix package or through our custom opam repository.
 
-### For use
+**Nix package:**
 
-Through the nix package 
-
-1. (First time only) setup nix repo [nix package](https://github.com/katrinafyi/pac-nix)
+1. (First time only) Set up the [pac-nix repo](https://github.com/katrinafyi/pac-nix).
 2. `nix profile install github:katrinafyi/pac-nix#gtirb-semantics`
 
-Through opam
+**Through opam:**
 
-1. (First time only) Set up [opam repository](https://github.com/ailrst/opam-repository)
-
-```sh
-opam repository add pac https://github.com/ailrst/opam-repository.git
-```
+1. (First time only) Set up the custom [opam repository](https://github.com/ailrst/opam-repository):
+   ```sh
+   opam repository add pac https://github.com/ailrst/opam-repository.git
+   ```
 
 2. `opam install gtirb_semantics`
 
-### For development
+## Setting up for development
 
-1. (First time only) install [ASLp](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies)
+1. Install the [ASLp](https://github.com/UQ-PAC/aslp) dependency in one of these ways:
+   - from the opam repository: `opam install asli` (assuming the custom opam repository has been set up, make sure the version is **>= 0.3.0**!),
+   - via an opam pin: `opam pin asli git+https://github.com/UQ-PAC/aslp`, or
+   - by manually compiling ASLp, following [these instructions](https://github.com/UQ-PAC/aslp?tab=readme-ov-file#installing-dependencies).
 
-(Through opam repository or opam pin)
+2. Clone and install gtirb-semantics:
 
-```shell
-opam pin asli git+https://github.com/UQ-PAC/aslp
-```
-
-2. Clone and install
-
-```
-git clone git@github.com:UQ-PAC/gtirb-semantics.git && cd gtirb-semantics
-opam install --deps-only .
-dune build  --profile=release
-dune install
-```
+   ```bash
+   git clone git@github.com:UQ-PAC/gtirb-semantics.git && cd gtirb-semantics
+   opam install --deps-only .
+   dune build  --profile=release
+   dune install
+   ```
 
 - If the build fails finding `protoc`, it can be installed through the system package manager.
 - Lift binaries with `ddisasm` ([install using nix](https://github.com/katrinafyi/pac-nix?tab=readme-ov-file))
@@ -52,11 +47,11 @@ dune install
 
 To save on the initialisation time (2s which can dominate execution time when lifting many programs)
 and keep the in-memory instruction cache warm, it is possible to use `gtirb_semantics` as a
-client-server. 
+client-server.
 
 For example:
 
-```
+```bash
 gtirb_semantics --serve & > /dev/null
 gtirb_semantics --client input.gtirb output.gts
 gtirb_semantics --client input2.gtirb output2.gts
@@ -85,7 +80,7 @@ ddisasm ./a.out --ir a.gtirb
 ## GTIRB Specifics
 The serialised output is almost identical to that produced by ddisasm except with a few differences:
 * The file does not have the 8-byte magic prefix used by GTIRB.
-* The semantic information provided by ASLi has been added as an auxdata record for each compilation module. 
+* The semantic information provided by ASLi has been added as an auxdata record for each compilation module.
   The semantic information JSON data is structured as so:
   ```js
   {
