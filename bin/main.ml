@@ -95,7 +95,7 @@ let do_block ~(need_flip : bool) ((b, c) : content_block * CodeBlock.t) :
   let size = c.size in
   let offset = b.block.offset in
   let ruuid = c.uuid in
-  let address = b.address in
+  let address = b.address + offset in
   let num_opcodes = c.size / opcode_length in
   if size <> num_opcodes * opcode_length then
     Printf.eprintf "block size is not a multiple of opcode size (size %d): %s\n"
