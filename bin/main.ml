@@ -20,7 +20,6 @@ type rectified_block = {
   contents : bytes;
   opcodes : bytes list;
   address : int;
-  offset : int;
   size : int;
 }
 
@@ -93,18 +92,17 @@ let do_block ~(need_flip : bool) ((b, c) : content_block * CodeBlock.t) :
   in
 
   let size = c.size in
-  let offset = b.block.offset in
   let ruuid = c.uuid in
-  let address = b.address + offset in
+  let address = b.address in
   let num_opcodes = c.size / opcode_length in
   if size <> num_opcodes * opcode_length then
     Printf.eprintf "block size is not a multiple of opcode size (size %d): %s\n"
       size (b64_of_uuid ruuid);
 
-  let contents = Bytes.sub b.raw offset size in
+  let contents = Bytes.sub b.raw b.block.offset size in
   let opcodes = List.init num_opcodes (cut_op contents) in
 
-  { size; offset; ruuid; contents; opcodes; address }
+  { size; ruuid; contents; opcodes; address }
 
 let ( let* ) = Lwt.bind
 
@@ -114,8 +112,8 @@ let do_module (m : Module.t) : Module.t Lwt.t =
     List.flatten @@ List.map (fun (s : Section.t) -> s.byte_intervals) all_sects
   in
 
-  let content_block (i : ByteInterval.t) (b : Block.t) =
-    { block = b; raw = i.contents; address = i.address }
+  let content_block (i : ByteInterval.t) (b : Block.t) : content_block =
+    { block = b; raw = i.contents; address = i.address + b.offset }
   in
 
   let ival_blks : content_block list =
