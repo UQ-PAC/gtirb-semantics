@@ -157,7 +157,9 @@ def main():
     # and: https://protobuf.dev/programming-guides/proto3/#json
     msgdict = google.protobuf.json_format.MessageToDict(
       message,
-      always_print_fields_with_no_presence=True,
+including_default_value_fields=True,
+
+      # always_print_fields_with_no_presence=True,
       preserving_proto_field_name=True
     )
 
@@ -171,7 +173,12 @@ def main():
           return process_auxdata(x)
 
       def process_auxdata(x):
-        if isinstance(x, list):
+        if isinstance(x, bytes):
+          try:
+            return json.loads(x.decode('ascii'))
+          except Exception:
+            return str(x)
+        elif isinstance(x, list):
           return [process_auxdata(y) for y in x]
         elif isinstance(x, dict):
           if set(x.keys()) == {'type_name', 'data'}:
@@ -190,7 +197,7 @@ def main():
         elif isinstance(x, tuple):
           return tuple(process_auxdata(y) for y in x)
         elif isinstance(x, set):
-          return set(process_auxdata(y) for y in x)
+          return [process_auxdata(y) for y in x]
         else:
           assert False, "unsup type " + repr(x)
 
