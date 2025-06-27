@@ -21,7 +21,6 @@ import logging
 import pathlib
 import typing
 import base64
-import gtirb
 import shlex
 import uuid
 import json
@@ -77,6 +76,7 @@ def main():
   g.add_argument('--idem', choices=['json', 'proto'], default=None, help='instead of converting, perform an idempotent normalisation of the given file type')
   argp.add_argument('--proto', '-p', type=str, default=_gtirb, help='directory of .proto files (default: bundled GTIRB .proto files)')
   argp.add_argument('--msgtype', '-m', type=str, default=_gtirb_ir_type, help='protobuf message type (default: gtirb.proto.IR)')
+  argp.add_argument('--auxdata', help='decode GTIRB AuxData (requires `gtirb` python package) (default: false)')
   argp.add_argument('input', nargs='?', type=argparse.FileType('rb'), default=sys.stdin.buffer, help='input file path (default: stdin)')
   argp.add_argument('output', nargs='?', type=argparse.FileType('ab+'), default=sys.stdout.buffer, help='output file path (default: stdout)')
 
@@ -96,6 +96,9 @@ def main():
     args.fr = args.to = args.idem
   else:
     args.fr, args.to = 'proto', 'json'
+
+  if args.auxdata and args.proto != _gtirb:
+    log.warning("using --auxdata with non-default protobuf spec may behave unexpectedly")
 
   if args.proto == _gtirb:
     fdsetdata = zlib.decompress(base64.b64decode(GTIRB_FDSET))
@@ -157,13 +160,12 @@ def main():
     # and: https://protobuf.dev/programming-guides/proto3/#json
     msgdict = google.protobuf.json_format.MessageToDict(
       message,
-including_default_value_fields=True,
-
-      # always_print_fields_with_no_presence=True,
+      always_print_fields_with_no_presence=True,
       preserving_proto_field_name=True
     )
 
-    if args.proto == _gtirb:
+    if args.auxdata:
+      import gtirb
       ser = gtirb.serialization.Serialization()
 
       def process_keys(x):
