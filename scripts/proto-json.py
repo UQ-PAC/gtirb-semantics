@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # vim: ts=2 sts=2 et sw=2
 
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "gtirb~=2.0.0",
+# ]
+# ///
+
 import google.protobuf.message_factory
 import google.protobuf.descriptor_pool
 import google.protobuf.descriptor_pb2
@@ -15,6 +22,7 @@ import pathlib
 import typing
 import base64
 import shlex
+import uuid
 import json
 import zlib
 import sys
@@ -68,6 +76,7 @@ def main():
   g.add_argument('--idem', choices=['json', 'proto'], default=None, help='instead of converting, perform an idempotent normalisation of the given file type')
   argp.add_argument('--proto', '-p', type=str, default=_gtirb, help='directory of .proto files (default: bundled GTIRB .proto files)')
   argp.add_argument('--msgtype', '-m', type=str, default=_gtirb_ir_type, help='protobuf message type (default: gtirb.proto.IR)')
+  argp.add_argument('--auxdata', help='decode GTIRB AuxData (requires `gtirb` python package) (default: false)')
   argp.add_argument('input', nargs='?', type=argparse.FileType('rb'), default=sys.stdin.buffer, help='input file path (default: stdin)')
   argp.add_argument('output', nargs='?', type=argparse.FileType('ab+'), default=sys.stdout.buffer, help='output file path (default: stdout)')
 
@@ -87,6 +96,9 @@ def main():
     args.fr = args.to = args.idem
   else:
     args.fr, args.to = 'proto', 'json'
+
+  if args.auxdata and args.proto != _gtirb:
+    log.warning("using --auxdata with non-default protobuf spec may behave unexpectedly")
 
   if args.proto == _gtirb:
     fdsetdata = zlib.decompress(base64.b64decode(GTIRB_FDSET))
@@ -147,12 +159,54 @@ def main():
     # see: https://github.com/protocolbuffers/protobuf/blob/main/python/google/protobuf/json_format.py
     # and: https://protobuf.dev/programming-guides/proto3/#json
     msgdict = google.protobuf.json_format.MessageToDict(
-      message, 
-      including_default_value_fields=True, 
+      message,
+      always_print_fields_with_no_presence=True,
       preserving_proto_field_name=True
     )
 
-    data = json.dumps(msgdict, sort_keys=True, indent=2)
+    if args.auxdata:
+      import gtirb
+      ser = gtirb.serialization.Serialization()
+
+      def process_keys(x):
+        if isinstance(x, tuple):
+          return str(tuple(process_keys(y) for y in x))
+        else:
+          return process_auxdata(x)
+
+      def process_auxdata(x):
+        if isinstance(x, bytes):
+          try:
+            return json.loads(x.decode('ascii'))
+          except Exception:
+            return str(x)
+        elif isinstance(x, list):
+          return [process_auxdata(y) for y in x]
+        elif isinstance(x, dict):
+          if set(x.keys()) == {'type_name', 'data'}:
+            data = base64.b64decode(x['data'])
+            return process_auxdata({
+              'type_name': x['type_name'],
+              '_decoded': ser.decode(data, x['type_name'])
+            })
+          return dict((process_keys(k), process_auxdata(v)) for k,v in x.items())
+        elif isinstance(x, uuid.UUID):
+          return base64.b64encode(x.bytes).decode('ascii')
+        elif isinstance(x, gtirb.offset.Offset):
+          return str(x)
+        elif x is None or isinstance(x, (str, int, float, bool, bytes)):
+          return x
+        elif isinstance(x, tuple):
+          return tuple(process_auxdata(y) for y in x)
+        elif isinstance(x, set):
+          return [process_auxdata(y) for y in x]
+        else:
+          assert False, "unsup type " + repr(x)
+
+      msgdict = process_auxdata(msgdict)
+      # print(msgdict)
+
+    data = json.dumps(msgdict, indent=2, sort_keys=True, default=str)
     args.output.write(data.encode('utf-8'))
 
 
