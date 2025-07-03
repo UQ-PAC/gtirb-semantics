@@ -76,7 +76,7 @@ def main():
   g.add_argument('--idem', choices=['json', 'proto'], default=None, help='instead of converting, perform an idempotent normalisation of the given file type')
   argp.add_argument('--proto', '-p', type=str, default=_gtirb, help='directory of .proto files (default: bundled GTIRB .proto files)')
   argp.add_argument('--msgtype', '-m', type=str, default=_gtirb_ir_type, help='protobuf message type (default: gtirb.proto.IR)')
-  argp.add_argument('--auxdata', help='decode GTIRB AuxData (requires `gtirb` python package) (default: false)')
+  argp.add_argument('--auxdata', action='store_true', help='decode GTIRB AuxData (requires `gtirb` python package) (default: false)')
   argp.add_argument('input', nargs='?', type=argparse.FileType('rb'), default=sys.stdin.buffer, help='input file path (default: stdin)')
   argp.add_argument('output', nargs='?', type=argparse.FileType('ab+'), default=sys.stdout.buffer, help='output file path (default: stdout)')
 
