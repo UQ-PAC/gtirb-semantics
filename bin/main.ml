@@ -1,6 +1,6 @@
 module OcamlResult = Result
 open Ocaml_protoc_plugin
-open Gtirb_semantics.Lift
+open Gtirb_semantics.Lib
 open Gtirb_modules.All
 module Result = OcamlResult
 open Lifter
@@ -46,11 +46,12 @@ let handle_rest_arg arg =
 let usage_string = "[options] [input.gtirb output.gts]"
 let usage_message = Printf.sprintf "usage: %s %s\n" Sys.argv.(0) usage_string
 
-let mode () =
-  match (!client, !offline) with
-  | _, true -> `LocalOffline
-  | true, false -> `Client (Client.connect ())
-  | false, false -> `LocalOnline
+let mode =
+  lazy
+    (match (!client, !offline) with
+    | _, true -> `LocalOffline
+    | true, false -> `Client (Client.connect ())
+    | false, false -> `LocalOnline)
 
 (* ASL specifications are from the bundled ARM semantics in libASL. *)
 
@@ -73,7 +74,7 @@ let do_module (m : Module.t) : Module.t Lwt.t =
 
   (* Evaluate each instruction one by one with a new environment for each *)
   let asts (b : rectified_block) =
-    match mode () with
+    match Lazy.force mode with
     | `Client c ->
         let ops =
           fold_rectified_block_with_address b (fun addr op ->
@@ -110,7 +111,7 @@ let do_module (m : Module.t) : Module.t Lwt.t =
         match x with
         | Ok sl -> to_list @@ List.map to_string sl
         | Error err ->
-            (match mode () with
+            (match Lazy.force mode with
             | `Client _ ->
                 Printf.eprintf "Decode error on op %s: %s\n" err.opcode
                   err.error
@@ -207,7 +208,7 @@ let gtirb_to_gts () : unit =
     let stats = Server.get_local_lifter_stats () in
     let oc = if stats.fail > 0 then stderr else stdout in
     let cache =
-      match mode () with
+      match Lazy.force mode with
       | `LocalOffline -> ""
       | _ -> Printf.sprintf " (%f cache hit rate)" stats.cache_hit_rate
     in

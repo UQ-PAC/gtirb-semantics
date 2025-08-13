@@ -1,8 +1,9 @@
 (library
  (name gtirb_semantics)
  (public_name gtirb_semantics.lib)
+ (modules lib)
  (libraries ocaml-protoc-plugin asli.libASL base64 gtirb_modules
             aslp_client_server_ocaml.aslp_common
             aslp_client_server_ocaml.lifter
             )
- (modules lift))
+ )
