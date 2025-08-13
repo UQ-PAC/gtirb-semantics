@@ -22,7 +22,10 @@ let fold_opcode_list_with_address address ops lift =
   snd
   @@ List.fold_left_map
        (fun i op ->
-         (i + opcode_length, lift i (Opcode.of_be_bytes (String.of_bytes op))))
+         ( i + opcode_length,
+           lift i
+             (* have already swapped the byte order to big endian just load opcode in machine's format*)
+             (Opcode.of_le_bytes (String.of_bytes op)) ))
        address ops
 
 let fold_rectified_block_with_address (r : rectified_block) lift =
