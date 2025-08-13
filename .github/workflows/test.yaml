@@ -1,0 +1,35 @@
+name: CompileTest
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions: read-all
+
+jobs:
+  deploy-odoc:
+    name: Compile
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tree
+        uses: actions/checkout@v4
+
+      - name: Set-up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      - name: Install dependencies
+        run: opam install . --deps-only --with-doc
+
+      - name: Build
+        run: opam exec -- dune build --ignore-promoted-rules
+
+      - name: Build documentation
+        run: opam exec -- dune build --ignore-promoted-rules @doc
+
+      - name: Run test
+        run: opam exec -- dune runtest
