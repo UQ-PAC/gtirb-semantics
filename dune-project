@@ -20,7 +20,7 @@
  (synopsis "Add semantic information to the IR of a disassembled ARM64 binary")
  (depends ocaml dune yojson (asli (>= 0.3.0)) 
    (ocaml-protoc-plugin (>= 6.1.0)) base64 
-   (aslp_client_server_ocaml  (>= 0.1.2))
+   (aslp_client_server_ocaml  (>= 0.2.0))
    lwt mtime)
  (tags
   (decompilers instruction-lifters static-analysis)))
