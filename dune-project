@@ -21,7 +21,9 @@
  (depends ocaml dune yojson (asli (>= 0.3.0)) 
    (ocaml-protoc-plugin (>= 6.1.0)) base64 
    (aslp_client_server_ocaml  (>= 0.1.2))
-   lwt mtime)
+   lwt mtime
+   (odoc :with-doc)
+   )
  (tags
   (decompilers instruction-lifters static-analysis)))
 
