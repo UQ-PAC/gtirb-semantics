@@ -23,9 +23,10 @@ jobs:
           ocaml-compiler: 5
 
       - name: Install dependencies
-        run: opam repository add pac https://github.com/UQ-PAC/opam-repository.git
-        run: opam update
-        run: opam install . --deps-only --with-doc
+        run: |
+          opam repository add pac https://github.com/UQ-PAC/opam-repository.git
+          opam update
+          opam install . --deps-only --with-doc
 
       - name: Build
         run: opam exec -- dune build --ignore-promoted-rules
