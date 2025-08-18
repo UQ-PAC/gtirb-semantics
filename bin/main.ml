@@ -141,7 +141,7 @@ let do_module (m : Module.t) : Module.t Lwt.t =
            with_asts)
     in
 
-    let json_str = Yojson.Safe.to_string paired in
+    let json_str = Yojson.Safe.pretty_to_string paired in
     if !json_file <> "" then (
       let f = open_out !json_file in
       output_string f json_str;

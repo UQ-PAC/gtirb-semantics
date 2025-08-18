@@ -1,7 +1,6 @@
 (executable
  (public_name gtirb_semantics)
  (name main)
- (flags (:standard -w -33 ))
  (libraries base64 yojson gtirb_semantics asli.libASL 
             aslp_client_server_ocaml.aslp_common 
             aslp_client_server_ocaml.aslp_client 
