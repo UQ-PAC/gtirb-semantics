@@ -16,6 +16,7 @@ type ast_block = { auuid : bytes; asts : opcode_sem list }
 (* flags *)
 let json_file = ref ""
 let serve = ref false
+let no_timer = ref false
 let client = ref false
 let offline = ref false
 let shutdown_server = ref false
@@ -30,6 +31,7 @@ let speclist =
     ("--client", Arg.Set client, "Use client to server");
     ("--offline", Arg.Set offline, "Use offline lifter (implies --local)");
     ("--shutdown-server", Arg.Set shutdown_server, "Stop server process");
+    ("--no-time", Arg.Set no_timer, "Don't show time elapsed on termination.");
   ]
 
 let count_pos_args = ref 0
@@ -217,10 +219,11 @@ let gtirb_to_gts () : unit =
       | `LocalOffline -> ""
       | _ -> Printf.sprintf " (%f cache hit rate)" stats.cache_hit_rate
     in
+    let time  = if (!no_timer) then "" else (Printf.sprintf "in %f sec (%f user time) " time_delta usr_time_delta ) in
     Printf.fprintf oc
-      "Successfully lifted %d instructions in %f sec (%f user time) (%d \
+      "Successfully lifted %d instructions %s(%d \
        failure: %d unique opcodes)%s\n"
-      stats.success time_delta usr_time_delta stats.fail
+      stats.success time stats.fail
       (List.length stats.unique_failing_opcodes_le)
       cache
 

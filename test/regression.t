@@ -9,17 +9,18 @@
     --client Use client to server
     --offline Use offline lifter (implies --local)
     --shutdown-server Stop server process
+    --no-time Don't show time elapsed on termination.
     -help  Display this list of options
     --help  Display this list of options
 
-  $ ../bin/main.exe ../extras/example-bin/exampl2.gtirb out.gts --json example2.json 2>&1 | sed -E 's/in [0-9]+.[0-9]+ sec .*user time\)/omitted/'
+  $ ../bin/main.exe ../extras/example-bin/exampl2.gtirb out.gts --no-time --json example2.json 2>&1
   Lifting
-  Successfully lifted 128 instructions omitted (0 failure: 0 unique opcodes) (0.000000 cache hit rate)
+  Successfully lifted 128 instructions (0 failure: 0 unique opcodes) (0.000000 cache hit rate)
 
  
-  $ ../bin/main.exe ../extras/example-bin/exampl2.gtirb out.gts --json exampl2offline.json --offline 2>&1 | sed -E 's/in [0-9]+.[0-9]+ sec .*user time\)/omitted/'
+  $ ../bin/main.exe ../extras/example-bin/exampl2.gtirb out.gts --no-time --json exampl2offline.json --offline 2>&1
   Lifting
-  Successfully lifted 122 instructions omitted (6 failure: 0 unique opcodes)
+  Successfully lifted 122 instructions (6 failure: 0 unique opcodes)
 
 
   $ ../bin/main.exe ../extras/example-bin/exampl2.gtirb out.gts --serve &
