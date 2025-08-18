@@ -74,23 +74,28 @@ let do_module (m : Module.t) : Module.t Lwt.t =
 
   (* Evaluate each instruction one by one with a new environment for each *)
   let asts (b : rectified_block) =
+    let lift_local
+        (lifter :
+          ?address:int -> int32 -> (LibASL.Asl_ast.stmt list, string) result) =
+      function
+      | address, opcode ->
+          lifter ~address opcode |> to_result (Opcode.to_hex_string opcode)
+    in
     match Lazy.force mode with
     | `Client c ->
         let ops =
-          fold_rectified_block_with_address b (fun addr op ->
-              (Opcode.to_be_bytes op, addr))
+          opcodes_zipped_with_address b
+          |> List.map (function addr, op -> (Opcode.to_be_bytes op, addr))
         in
         Lwt.bind c (fun c -> Client.lift_multi c ~opcodes:ops)
     | `LocalOnline ->
         Lwt.return
-        @@ fold_rectified_block_with_address b (fun address opcode ->
-               OnlineLifter.lift ~address opcode
-               |> to_result (Opcode.to_hex_string opcode))
+        @@ (opcodes_zipped_with_address b
+           |> List.map (lift_local CachedOnlineLifter.lift))
     | `LocalOffline ->
         Lwt.return
-        @@ fold_rectified_block_with_address b (fun address opcode ->
-               OfflineLifter.lift ~address opcode
-               |> to_result (Opcode.to_hex_string opcode))
+        @@ (opcodes_zipped_with_address b
+           |> List.map (lift_local OfflineLifter.lift))
   in
 
   let* with_asts =

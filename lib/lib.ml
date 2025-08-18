@@ -10,7 +10,7 @@ type content_block = { block : Block.t; raw : bytes; address : int }
 type rectified_block = {
   ruuid : bytes;
   contents : bytes;
-  opcodes : bytes list;
+  opcodes : Opcode.t list;
   address : int;
   size : int;
 }
@@ -18,18 +18,12 @@ type rectified_block = {
 
 let b64_of_uuid uuid = Base64.encode_exn (Bytes.to_string uuid)
 
-let fold_opcode_list_with_address address ops lift =
-  snd
-  @@ List.fold_left_map
-       (fun i op ->
-         ( i + opcode_length,
-           lift i
-             (* have already swapped the byte order to big endian just load opcode in machine's format*)
-             (Opcode.of_le_bytes (String.of_bytes op)) ))
-       address ops
-
-let fold_rectified_block_with_address (r : rectified_block) lift =
-  fold_opcode_list_with_address r.address r.opcodes lift
+let opcodes_zipped_with_address (r : rectified_block) : (int * Opcode.t) list =
+  let fold_map_opcode_list_with_address address ops =
+    snd
+    @@ List.fold_left_map (fun i op -> (i + opcode_length, (i, op))) address ops
+  in
+  fold_map_opcode_list_with_address r.address r.opcodes
 
 let rectify_block ~(byte_order : [> `LittleEndian | `BigEndian ])
     (content_block : content_block) (code_block : CodeBlock.t) : rectified_block
@@ -58,6 +52,11 @@ let rectify_block ~(byte_order : [> `LittleEndian | `BigEndian ])
 
   let contents = Bytes.sub content_block.raw content_block.block.offset size in
   let opcodes = List.init num_opcodes (cut_op contents) in
+  (* have already swapped the byte order to ensure big endian just load opcode in host 
+     machine's endianness *)
+  let opcodes =
+    List.map (fun op -> Opcode.of_le_bytes (String.of_bytes op)) opcodes
+  in
 
   { size; ruuid; contents; opcodes; address }
 
