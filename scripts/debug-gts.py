@@ -122,7 +122,7 @@ def decode_isns(isns: collections.abc.Iterable[bytes]):
   out = {}
   for x in chunks(isns, arguments.chunk_size):
     out |= _decode_isns(x)
-  return out 
+  return out
 
 def do_block(uuid: str, blk: gtirb.CodeBlock, contents: bytes, sem, isn_names: dict[bytes, str]):
   blksize = blk.size
@@ -154,8 +154,11 @@ def do_block(uuid: str, blk: gtirb.CodeBlock, contents: bytes, sem, isn_names: d
 def b64_uuid(uuid: uuid.UUID) -> str:
   return base64.b64encode(uuid.bytes).decode('ascii')
 
-def compute_friendly_names(mod: gtirb.Module) -> dict[uuid.UUID, str]:
+def get_function_name(mod: gtirb.Module, func: uuid.UUID) -> str:
   funnames = mod.aux_data['functionNames'].data
+  return funnames[func].name
+
+def compute_friendly_names(mod: gtirb.Module) -> dict[uuid.UUID, str]:
   funentries = mod.aux_data['functionEntries'].data
   funblocks = mod.aux_data['functionBlocks'].data
 
@@ -172,7 +175,8 @@ def compute_friendly_names(mod: gtirb.Module) -> dict[uuid.UUID, str]:
         proxy = outgoing.target
         proxy_ref = next(proxy.references, None) if isinstance(proxy, gtirb.ProxyBlock) else None
         proxy_name = f" ({proxy_ref.name})" if proxy_ref else ''
-      out[blk.uuid] = funnames[func].name + proxy_name + entry + ' [{i:>{w}}/{l}]'.format(i=i, l=l, w=len(l))
+      funname = get_function_name(mod, func)
+      out[blk.uuid] = funname + proxy_name + entry + ' [{i:>{w}}/{l}]'.format(i=i, l=l, w=len(l))
 
   return out
 
@@ -186,10 +190,10 @@ def friendly_block(mod: gtirb.Module, blk: gtirb.Block, with_uuid=False, *, _blo
     return prefix + _block_to_func[uuid]
   elif isinstance(blk, gtirb.ProxyBlock):
     ref = next(blk.references, None)
-    if ref is not None: 
+    if ref is not None:
       return prefix + f'({type(blk).__name__})' + ' / ' + ref.name
     else :
-      return prefix + "Unresolved " + f'{type(blk).__name__}' 
+      return prefix + "Unresolved " + f'{type(blk).__name__}'
 
   return prefix + f'({type(blk).__name__})'
 
@@ -197,6 +201,10 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
   sems = mod.aux_data['ast'].data
   sems = json.loads(sems)
 
+  funblocks = mod.aux_data['functionBlocks'].data
+  block_to_fun = {
+    b.uuid: fun for fun, blocks in funblocks.items() for b in blocks
+  }
 
   gtirb_ids = set()
   sem_ids = set(sems.keys())
@@ -207,10 +215,14 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
 
       uuid = blk.uuid
 
+      fun = block_to_fun.get(uuid)
+
       b64 = b64_uuid(uuid)
       friendly = friendly_block(mod, blk)
       out[b64] = {
         'name': friendly,
+        'procedure': get_function_name(mod, fun) if fun else None,
+        'section': blk.section.name,
         'address': format_address(blk.address),
         'code': do_block(friendly, blk, bytes(blk.byte_interval.contents), sems[b64], isn_names), # type: ignore
         'successors': {
