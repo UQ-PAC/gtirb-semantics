@@ -222,6 +222,7 @@ def do_module(mod: gtirb.Module, isn_names: dict[bytes, str]):
       out[b64] = {
         'name': friendly,
         'procedure': get_function_name(mod, fun) if fun else None,
+        'section': blk.section.name,
         'address': format_address(blk.address),
         'code': do_block(friendly, blk, bytes(blk.byte_interval.contents), sems[b64], isn_names), # type: ignore
         'successors': {
