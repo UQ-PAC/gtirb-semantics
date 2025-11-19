@@ -1,2 +1,7 @@
-(test
- (name gtirb_semantics))
+(cram
+ (package gtirb_semantics)
+ (deps (package gtirb_semantics) 
+       ../extras/example-bin/exampl2.gtirb 
+       %{exe:../bin/main.exe})
+ (applies_to *))
+

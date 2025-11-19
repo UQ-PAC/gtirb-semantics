@@ -1,38 +1,22 @@
 module OcamlResult = Result
 open Ocaml_protoc_plugin
-open Gtirb_semantics.IR.Gtirb.Proto
-open Gtirb_semantics.ByteInterval.Gtirb.Proto
-open Gtirb_semantics.Module.Gtirb.Proto
-open Gtirb_semantics.Section.Gtirb.Proto
-open Gtirb_semantics.CodeBlock.Gtirb.Proto
-open Gtirb_semantics.AuxData.Gtirb.Proto
-open Aslp_common.Common
+open Gtirb_semantics.Lib
+open Gtirb_modules.All
 module Result = OcamlResult
+open Lifter
+open Aslp_common.Common
 
 (* TYPES  *)
 
 let () = Printexc.record_backtrace true
 
-(* These could probably be simplified *)
-(* OCaml representation of mid-evaluation code block  *)
-type rectified_block = {
-  ruuid : bytes;
-  contents : bytes;
-  opcodes : bytes list;
-  address : int;
-  size : int;
-}
-
 (* ASLi semantic info for a block *)
 type ast_block = { auuid : bytes; asts : opcode_sem list }
 
-(* Wrapper for polymorphic code/data/not-set block pre-rectification  *)
-type content_block = { block : Block.t; raw : bytes; address : int }
-
-(* CONSTANTS  *)
-let opcode_length = 4
+(* flags *)
 let json_file = ref ""
 let serve = ref false
+let no_timer = ref false
 let client = ref false
 let offline = ref false
 let shutdown_server = ref false
@@ -47,6 +31,7 @@ let speclist =
     ("--client", Arg.Set client, "Use client to server");
     ("--offline", Arg.Set offline, "Use offline lifter (implies --local)");
     ("--shutdown-server", Arg.Set shutdown_server, "Stop server process");
+    ("--no-time", Arg.Set no_timer, "Don't show time elapsed on termination.");
   ]
 
 let count_pos_args = ref 0
@@ -63,11 +48,12 @@ let handle_rest_arg arg =
 let usage_string = "[options] [input.gtirb output.gts]"
 let usage_message = Printf.sprintf "usage: %s %s\n" Sys.argv.(0) usage_string
 
-let mode () =
-  match (!client, !offline) with
-  | _, true -> `LocalOffline
-  | true, false -> `Client
-  | false, false -> `LocalOnline
+let mode =
+  lazy
+    (match (!client, !offline) with
+    | _, true -> `LocalOffline
+    | true, false -> `Client (Client.connect ())
+    | false, false -> `LocalOnline)
 
 (* ASL specifications are from the bundled ARM semantics in libASL. *)
 
@@ -77,114 +63,49 @@ let mode () =
 (* Byte & array manipulation convenience functions *)
 let _b_tl op n = Bytes.sub op n (Bytes.length op - n)
 let _b_hd op n = Bytes.sub op 0 n
-let b64_of_uuid uuid = Base64.encode_exn (Bytes.to_string uuid)
-
-let endian_reverse (opcode : bytes) : bytes =
-  let len = Bytes.length opcode in
-  let getrev i = Bytes.get opcode (len - 1 - i) in
-  Bytes.init len getrev
-
-let do_block ~(need_flip : bool) ((b, c) : content_block * CodeBlock.t) :
-    rectified_block =
-  let cut_op contents i =
-    let bytes = Bytes.sub contents (i * opcode_length) opcode_length in
-    if need_flip then endian_reverse bytes else bytes
-  in
-
-  let size = c.size in
-  let ruuid = c.uuid in
-  let address = b.address in
-  let num_opcodes = c.size / opcode_length in
-  if size <> num_opcodes * opcode_length then
-    Printf.eprintf "block size is not a multiple of opcode size (size %d): %s\n"
-      size (b64_of_uuid ruuid);
-
-  let contents = Bytes.sub b.raw b.block.offset size in
-  let opcodes = List.init num_opcodes (cut_op contents) in
-
-  { size; ruuid; contents; opcodes; address }
-
 let ( let* ) = Lwt.bind
 
 let do_module (m : Module.t) : Module.t Lwt.t =
-  let all_sects = m.sections in
-  let intervals =
-    List.flatten @@ List.map (fun (s : Section.t) -> s.byte_intervals) all_sects
+  let rectified = code_blocks_of_module m in
+
+  let to_result opcode x : opcode_sem =
+    x
+    |> Result.map (List.map asl_stmt_to_string)
+    |> Result.map_error (fun error -> { opcode; error })
   in
-
-  let content_block (i : ByteInterval.t) (b : Block.t) : content_block =
-    { block = b; raw = i.contents; address = i.address + b.offset }
-  in
-
-  let ival_blks : content_block list =
-    List.flatten
-    @@ List.map
-         (fun i -> List.map (fun b -> content_block i b) i.blocks)
-         intervals
-  in
-
-  (* Resolve polymorphic block variants to filter only code blocks *)
-  let extract_code (b : content_block) =
-    match b.block.value with
-    | `Code (c : CodeBlock.t) -> Some (b, c)
-    | _ -> None
-  in
-
-  let cblocks = List.filter_map extract_code ival_blks in
-
-  let need_flip = m.byte_order = ByteOrder.LittleEndian in
-  let rblocks = List.map (do_block ~need_flip) cblocks in
 
   (* Evaluate each instruction one by one with a new environment for each *)
-  let rec lift_online_local (opcodes : bytes list) (addr : int) =
-    match opcodes with
-    | [] -> []
-    | h :: t ->
-        Server.(
-          lift_opcode ~cache:true
-            ~opcode:(Opcode.of_be_bytes (String.of_bytes h)))
-          addr
-        :: lift_online_local t (addr + opcode_length)
+  let asts (b : rectified_block) =
+    let lift_local
+        (lifter :
+          ?address:int -> int32 -> (LibASL.Asl_ast.stmt list, string) result) =
+      function
+      | address, opcode ->
+          lifter ~address opcode |> to_result (Opcode.to_hex_string opcode)
+    in
+    match Lazy.force mode with
+    | `Client c ->
+        let ops =
+          opcodes_zipped_with_address b
+          |> List.map (function addr, op -> (Opcode.to_be_bytes op, addr))
+        in
+        Lwt.bind c (fun c -> Client.lift_multi c ~opcodes:ops)
+    | `LocalOnline ->
+        Lwt.return
+        @@ (opcodes_zipped_with_address b
+           |> List.map (lift_local CachedOnlineLifter.lift))
+    | `LocalOffline ->
+        Lwt.return
+        @@ (opcodes_zipped_with_address b
+           |> List.map (lift_local OfflineLifter.lift))
   in
 
-  let lift_offline_local (opcodes : bytes list) (addr : int) =
-    let lift_one_offline (op : bytes) (addr : int) =
-      Server.(
-        lift_opcode_offline_lifter
-          ~opcode:(Opcode.of_be_bytes (String.of_bytes op)))
-        addr
-    in
-    let with_addrs =
-      List.mapi (fun i op -> (op, addr + (i * opcode_length))) opcodes
-    in
-    let res =
-      List.map (fun (opcode, addr) -> lift_one_offline opcode addr) with_addrs
-    in
-    res
-  in
-  let rec ops opcodes addr =
-    match opcodes with
-    | [] -> []
-    | h :: t -> (String.of_bytes h, addr) :: ops t (addr + opcode_length)
-  in
-  let asts opcodes addr =
-    match mode () with
-    | `Client -> Client.lift_multi ~opcodes:(ops opcodes addr)
-    | `LocalOnline -> Lwt.return @@ lift_online_local opcodes addr
-    | `LocalOffline -> Lwt.return @@ lift_offline_local opcodes addr
-  in
-
-  (*
-   let map' f l =
-    if List.length blk_orded > 10000
-      then Parmap.parmap ~ncores:2 f Parmap.(L l)
-      else map f l in *)
   let* with_asts =
     Lwt_list.map_p
       (fun b ->
-        let* asts = asts b.opcodes b.address in
+        let* asts = asts b in
         Lwt.return { auuid = b.ruuid; asts })
-      rblocks
+      rectified
   in
 
   (* Massage asli outputs into a format which can
@@ -197,8 +118,8 @@ let do_module (m : Module.t) : Module.t Lwt.t =
         match x with
         | Ok sl -> to_list @@ List.map to_string sl
         | Error err ->
-            (match mode () with
-            | `Client ->
+            (match Lazy.force mode with
+            | `Client _ ->
                 Printf.eprintf "Decode error on op %s: %s\n" err.opcode
                   err.error
             | _ -> ());
@@ -222,7 +143,7 @@ let do_module (m : Module.t) : Module.t Lwt.t =
            with_asts)
     in
 
-    let json_str = Yojson.Safe.to_string paired in
+    let json_str = Yojson.Safe.pretty_to_string paired in
     if !json_file <> "" then (
       let f = open_out !json_file in
       output_string f json_str;
@@ -294,14 +215,15 @@ let gtirb_to_gts () : unit =
     let stats = Server.get_local_lifter_stats () in
     let oc = if stats.fail > 0 then stderr else stdout in
     let cache =
-      match mode () with
+      match Lazy.force mode with
       | `LocalOffline -> ""
       | _ -> Printf.sprintf " (%f cache hit rate)" stats.cache_hit_rate
     in
+    let time  = if (!no_timer) then "" else (Printf.sprintf "in %f sec (%f user time) " time_delta usr_time_delta ) in
     Printf.fprintf oc
-      "Successfully lifted %d instructions in %f sec (%f user time) (%d \
+      "Successfully lifted %d instructions %s(%d \
        failure: %d unique opcodes)%s\n"
-      stats.success time_delta usr_time_delta stats.fail
+      stats.success time stats.fail
       (List.length stats.unique_failing_opcodes_le)
       cache
 
@@ -314,8 +236,12 @@ let () =
     output_string stderr usage_message;
     exit 1);
 
-  if !shutdown_server then Lwt_main.run @@ Client.shutdown_server ()
-  else if !serve then Server.start_server ()
+  if !shutdown_server then
+    Lwt_main.run
+    @@
+    let* c = Client.connect () in
+    Client.shutdown_server c
+  else if !serve then Server.run_server ()
   else (
     output_string stdout "Lifting\n";
     gtirb_to_gts ())

@@ -1,0 +1,15 @@
+
+(library
+ (name gtirb_modules)
+ (public_name gtirb_semantics.gtirb)
+ (libraries ocaml-protoc-plugin)
+ (modules all auxData byteInterval cFG codeBlock dataBlock iR module offset proxyBlock section symbol symbolicExpression
+))
+
+
+(rule
+ (targets auxData.ml byteInterval.ml cFG.ml codeBlock.ml dataBlock.ml iR.ml module.ml offset.ml proxyBlock.ml section.ml symbol.ml symbolicExpression.ml)
+ (deps
+  (:proto AuxData.proto ByteInterval.proto CFG.proto CodeBlock.proto DataBlock.proto IR.proto Module.proto Offset.proto ProxyBlock.proto Section.proto Symbol.proto SymbolicExpression.proto))
+ (action
+  (run protoc -I . --ocaml_out=. %{proto})))
